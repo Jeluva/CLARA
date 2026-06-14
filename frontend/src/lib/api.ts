@@ -15,17 +15,42 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let resp: Response;
   try {
-    resp = await fetch(`${BASE}${path}`);
-  } catch (cause) {
-    throw new ApiError(`Network error reaching ${path}`, 0);
+    resp = await fetch(`${BASE}${path}`, init);
+  } catch {
+    throw new ApiError(`No se pudo contactar el servidor (${path})`, 0);
   }
   if (!resp.ok) {
-    throw new ApiError(`Request to ${path} failed`, resp.status);
+    // Surface FastAPI's {detail: "..."} message when present.
+    let detail = `La petición a ${path} falló (${resp.status})`;
+    try {
+      const body = await resp.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      /* ignore non-JSON error bodies */
+    }
+    throw new ApiError(detail, resp.status);
   }
+  if (resp.status === 204) return undefined as T;
   return (await resp.json()) as T;
+}
+
+export function apiGet<T>(path: string): Promise<T> {
+  return request<T>(path);
+}
+
+export function apiPost<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function apiDelete(path: string): Promise<void> {
+  return request<void>(path, { method: "DELETE" });
 }
 
 export interface HealthResponse {
@@ -97,3 +122,56 @@ export const getExposure = () => apiGet<Exposure>("/portfolio/exposure");
 export const getHistory = () => apiGet<HistoryPoint[]>("/portfolio/history");
 export const getCorrelation = () =>
   apiGet<Correlation>("/research/correlation");
+
+// --- Data entry --------------------------------------------------------------
+
+export interface Asset {
+  id: number;
+  ticker: string;
+  name: string;
+  asset_class: string;
+  sector: string;
+  country: string;
+  currency: string;
+}
+
+export interface AssetCreate {
+  ticker: string;
+  name: string;
+  asset_class: string;
+  sector: string;
+  country: string;
+  currency: string;
+}
+
+export interface PositionFull {
+  id: number;
+  ticker: string;
+  quantity: number;
+  avg_cost: number;
+  opened_at: string;
+  status: string;
+}
+
+export interface IngestionResult {
+  source: string;
+  promoted: number;
+  quarantined: number;
+  message: string;
+}
+
+export const getAssets = () => apiGet<Asset[]>("/assets");
+export const createAsset = (body: AssetCreate) =>
+  apiPost<Asset>("/assets", body);
+export const deleteAsset = (id: number) => apiDelete(`/assets/${id}`);
+
+export const getPositions = () => apiGet<PositionFull[]>("/positions");
+export const createPosition = (body: {
+  ticker: string;
+  quantity: number;
+  avg_cost: number;
+}) => apiPost<PositionFull>("/positions", body);
+export const deletePosition = (id: number) => apiDelete(`/positions/${id}`);
+
+export const runIngestion = (source: string) =>
+  apiPost<IngestionResult>(`/ingestion/run?source=${source}`, {});
