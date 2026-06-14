@@ -83,7 +83,9 @@ cd frontend && npm test
       routers FastAPI (`/api/portfolio`, `/metrics`, `/exposure`, `/history`,
       `/research/correlation`) documentados en Swagger, con test de integración
       sobre el seed.
-- [ ] Fase 4 — Pestaña Portfolio
+- [x] **Fase 4 — Pestaña Portfolio:** dashboard principal con KPIs de valor/P&L,
+      evolución vs. benchmark, panel de riesgo, donuts de exposición y tabla de
+      posiciones, consumiendo la API con datos reales.
 - [ ] Fase 5 — Ingreso de datos
 - [ ] Fase 6 — Noticias & Sentimiento
 - [ ] Fase 7 — Research y Macro
