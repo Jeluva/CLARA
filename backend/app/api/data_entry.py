@@ -13,7 +13,9 @@ from app.api.schemas import (
     PositionOutFull,
     TransactionCreate,
 )
+from app.ingestion.news import run_mock_news_ingestion
 from app.ingestion.prices import run_mock_price_ingestion
+from app.ingestion.transcripts import run_mock_transcript_ingestion
 from app.services import crud_service as crud
 from app.storage.database import get_db
 
@@ -120,23 +122,33 @@ def create_transaction(
 # --- Ingestion ---------------------------------------------------------------
 
 
+_INGESTORS = {
+    "prices": (run_mock_price_ingestion, "precios"),
+    "news": (run_mock_news_ingestion, "noticias"),
+    "transcripts": (run_mock_transcript_ingestion, "transcripciones"),
+}
+
+
 @router.post("/api/ingestion/run", response_model=IngestionResult)
 def run_ingestion(
     source: str = "prices", db: Session = Depends(get_db)
 ) -> IngestionResult:
-    """Force-run a source's ingestion now. Currently: mock price source."""
-    if source != "prices":
+    """Force-run a source's (mock) ingestion now: prices, news or transcripts."""
+    entry = _INGESTORS.get(source)
+    if entry is None:
         raise HTTPException(
             status_code=400,
-            detail=f"Fuente '{source}' aún no disponible (mock).",
+            detail=f"Fuente '{source}' no disponible. "
+            f"Opciones: {', '.join(_INGESTORS)}.",
         )
-    result = run_mock_price_ingestion(db)
+    runner, noun = entry
+    result = runner(db)
     return IngestionResult(
         source=source,
         promoted=result.promoted,
         quarantined=result.quarantined,
         message=(
-            f"Ingestión '{source}': {result.promoted} precios promovidos, "
+            f"Ingestión '{source}': {result.promoted} {noun} promovidas, "
             f"{result.quarantined} en cuarentena."
         ),
     )

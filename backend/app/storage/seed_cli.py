@@ -5,6 +5,8 @@ Assumes the schema exists (`alembic upgrade head`). Idempotent — safe to re-ru
 
 from __future__ import annotations
 
+from app.ingestion.news import run_mock_news_ingestion
+from app.ingestion.transcripts import run_mock_transcript_ingestion
 from app.storage.database import SessionLocal
 from app.storage.seed import seed_database
 
@@ -12,6 +14,11 @@ from app.storage.seed import seed_database
 def main() -> None:
     with SessionLocal() as db:
         counts = seed_database(db)
+        # Also seed news + transcripts (mock sources, VADER sentiment).
+        news = run_mock_news_ingestion(db)
+        transcripts = run_mock_transcript_ingestion(db)
+        counts["news_promoted"] = news.promoted
+        counts["transcripts_promoted"] = transcripts.promoted
     print("Seed complete:")
     for key, value in counts.items():
         print(f"  {key}: {value}")

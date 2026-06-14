@@ -175,3 +175,43 @@ export const deletePosition = (id: number) => apiDelete(`/positions/${id}`);
 
 export const runIngestion = (source: string) =>
   apiPost<IngestionResult>(`/ingestion/run?source=${source}`, {});
+
+// --- News & sentiment --------------------------------------------------------
+
+export type SentimentLabel = "positive" | "neutral" | "negative";
+
+export interface NewsItem {
+  id: number;
+  ticker: string | null;
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  sentiment: number;
+  sentiment_label: SentimentLabel;
+  published_at: string;
+}
+
+export interface TickerSentiment {
+  ticker: string;
+  score: number;
+  label: SentimentLabel;
+  count: number;
+}
+
+export interface Transcript {
+  id: number;
+  source_channel: string;
+  title: string;
+  url: string;
+  summary: string;
+  sentiment: number;
+  sentiment_label: SentimentLabel;
+  published_at: string;
+}
+
+export const getNews = (ticker?: string) =>
+  apiGet<NewsItem[]>(`/news${ticker ? `?ticker=${ticker}` : ""}`);
+export const getNewsSentiment = () =>
+  apiGet<TickerSentiment[]>("/news/sentiment");
+export const getTranscripts = () => apiGet<Transcript[]>("/transcripts");
