@@ -6,6 +6,8 @@ import App from "@/App";
 // The Portfolio page calls the API on mount; stub fetch so the shell renders
 // deterministically in jsdom.
 beforeEach(() => {
+  // Return a superset shape that satisfies every endpoint the Portfolio page
+  // calls, plus an empty positions list so the table renders without crashing.
   vi.stubGlobal(
     "fetch",
     vi.fn(() =>
@@ -17,6 +19,16 @@ beforeEach(() => {
             app: "CLARA",
             version: "0.1.0",
             environment: "test",
+            total_value: 0,
+            total_cost: 0,
+            total_pnl: 0,
+            total_pnl_pct: 0,
+            daily_pnl: 0,
+            daily_pnl_pct: 0,
+            positions: [],
+            sector: {},
+            country: {},
+            currency: {},
           }),
       }),
     ),
