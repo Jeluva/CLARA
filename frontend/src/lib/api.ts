@@ -215,3 +215,31 @@ export const getNews = (ticker?: string) =>
 export const getNewsSentiment = () =>
   apiGet<TickerSentiment[]>("/news/sentiment");
 export const getTranscripts = () => apiGet<Transcript[]>("/transcripts");
+
+// --- Research & Macro --------------------------------------------------------
+
+export interface IndicatorPoint {
+  date: string;
+  close: number;
+  sma20: number | null;
+  sma50: number | null;
+  rsi: number | null;
+}
+
+export interface Indicators {
+  ticker: string;
+  points: IndicatorPoint[];
+}
+
+export interface MacroCard {
+  key: string;
+  label: string;
+  value: number;
+  unit: string;
+  change_pct: number;
+  group: string;
+}
+
+export const getIndicators = (ticker: string) =>
+  apiGet<Indicators>(`/research/indicators?ticker=${ticker}`);
+export const getMacro = () => apiGet<MacroCard[]>("/macro");

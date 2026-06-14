@@ -92,5 +92,7 @@ cd frontend && npm test
 - [x] **Fase 6 — Noticias & Sentimiento:** ingestión mock de noticias y
       transcripciones con sentimiento VADER real, feed filtrable por activo,
       score agregado por ticker y panel de transcripciones.
-- [ ] Fase 7 — Research y Macro
+- [x] **Fase 7 — Research y Macro:** matriz de correlación (heatmap),
+      indicadores técnicos (SMA 20/50, RSI 14) testeados a mano, y pestaña Macro
+      con índices/dólar/tasas (mock declarado).
 - [ ] Fase 8 — Pulido + publicación
