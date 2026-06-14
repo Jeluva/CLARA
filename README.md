@@ -76,7 +76,9 @@ cd frontend && npm test
 - [x] **Fase 1 — Capa de datos:** esquema medallion (bronze/silver/gold),
       checks de data quality con cuarentena, migraciones Alembic y seed
       idempotente con portfolio de ejemplo + ~1 año de precios.
-- [ ] Fase 2 — Analytics (métricas de riesgo testeadas)
+- [x] **Fase 2 — Analytics:** motor de métricas (rendimiento, volatilidad,
+      drawdown, Sharpe, beta, exposición, Herfindahl, correlación) como
+      funciones puras, 47 tests con valores verificados a mano.
 - [ ] Fase 3 — API
 - [ ] Fase 4 — Pestaña Portfolio
 - [ ] Fase 5 — Ingreso de datos
