@@ -89,6 +89,8 @@ cd frontend && npm test
 - [x] **Fase 5 — Ingreso de datos:** CRUD de activos/posiciones/transacciones
       con validación en el service, formularios end-to-end (cargás y aparece en
       Portfolio) y botón de ingestión idempotente.
-- [ ] Fase 6 — Noticias & Sentimiento
+- [x] **Fase 6 — Noticias & Sentimiento:** ingestión mock de noticias y
+      transcripciones con sentimiento VADER real, feed filtrable por activo,
+      score agregado por ticker y panel de transcripciones.
 - [ ] Fase 7 — Research y Macro
 - [ ] Fase 8 — Pulido + publicación

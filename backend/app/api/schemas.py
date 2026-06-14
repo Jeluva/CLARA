@@ -111,3 +111,36 @@ class IngestionResult(BaseModel):
     promoted: int
     quarantined: int
     message: str
+
+
+# --- News & sentiment --------------------------------------------------------
+
+
+class NewsItemOut(BaseModel):
+    id: int
+    ticker: str | None
+    title: str
+    summary: str
+    url: str
+    source: str
+    sentiment: float
+    sentiment_label: str
+    published_at: str
+
+
+class TickerSentimentOut(BaseModel):
+    ticker: str
+    score: float
+    label: str
+    count: int
+
+
+class TranscriptOut(BaseModel):
+    id: int
+    source_channel: str
+    title: str
+    url: str
+    summary: str
+    sentiment: float
+    sentiment_label: str
+    published_at: str
