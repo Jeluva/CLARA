@@ -11,5 +11,7 @@ vaderSentiment==3.3.2
 youtube-transcript-api==0.6.3
 httpx==0.28.1
 python-dotenv==1.0.1
+# Postgres driver for prod (dev uses SQLite, bundled with Python).
+psycopg[binary]==3.2.3
 pytest==8.3.4
 pytest-asyncio==0.25.1

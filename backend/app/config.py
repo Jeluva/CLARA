@@ -46,5 +46,8 @@ class Settings(BaseSettings):
     # Ingestion behaviour. During unattended dev runs we never hit the network.
     use_mock_sources: bool = True
 
+    # Background scheduler. Off by default so dev/tests don't mutate data.
+    scheduler_enabled: bool = False
+
 
 settings = Settings()
