@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp \"C:\\\\Users\\\\Jejol\\\\Downloads\\\\AUTORUN.md\" \"E:\\\\Proyects\\\\CLARA\\\\AUTORUN.md\" && echo \"AUTORUN copied\")"
+    ]
+  }
+}
