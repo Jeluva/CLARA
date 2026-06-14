@@ -51,6 +51,8 @@ cd backend
 python -m venv venv
 venv\Scripts\activate           # Windows (en bash: source venv/Scripts/activate)
 pip install -r requirements.txt
+alembic upgrade head            # crea el esquema (medallion + portfolio)
+python -m app.storage.seed_cli  # siembra portfolio de ejemplo + precios (mock)
 uvicorn app.main:app --reload   # http://127.0.0.1:8000  (docs en /docs)
 ```
 
@@ -71,7 +73,9 @@ cd frontend && npm test
 
 - [x] **Fase 0 — Scaffold:** app corre de punta a punta, theme aplicado, las 5
       pestañas navegables, tests y verificación visual funcionando.
-- [ ] Fase 1 — Capa de datos (medallion + data quality + seed)
+- [x] **Fase 1 — Capa de datos:** esquema medallion (bronze/silver/gold),
+      checks de data quality con cuarentena, migraciones Alembic y seed
+      idempotente con portfolio de ejemplo + ~1 año de precios.
 - [ ] Fase 2 — Analytics (métricas de riesgo testeadas)
 - [ ] Fase 3 — API
 - [ ] Fase 4 — Pestaña Portfolio
