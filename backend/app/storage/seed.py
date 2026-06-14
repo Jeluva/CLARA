@@ -29,8 +29,10 @@ from app.storage.models.bronze import BronzeRecord
 from app.storage.models.silver import Asset, Position, Transaction
 
 # Reference date for the seed. Kept explicit (not "today") so the dataset is
-# fully reproducible regardless of when the seed runs.
-SEED_END_DATE = date(2026, 6, 12)  # a Friday
+# fully reproducible regardless of when the seed runs. Deliberately set a couple
+# of weeks before "now" so the live (mock) price ingestion has a gap to catch up
+# on — that's what the "forzar ingestión" button demonstrates.
+SEED_END_DATE = date(2026, 5, 29)  # a Friday
 TRADING_DAYS = 252  # ~1 year of business days
 
 

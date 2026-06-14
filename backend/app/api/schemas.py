@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 
 
 class PositionOut(BaseModel):
@@ -55,3 +57,57 @@ class HistoryPoint(BaseModel):
 class CorrelationOut(BaseModel):
     tickers: list[str]
     matrix: list[list[float]]
+
+
+# --- Data-entry request models -----------------------------------------------
+
+
+class AssetCreate(BaseModel):
+    ticker: str = Field(min_length=1, max_length=32)
+    name: str = Field(min_length=1, max_length=128)
+    asset_class: str = Field(min_length=1, max_length=32)
+    sector: str = "Unknown"
+    country: str = "Unknown"
+    currency: str = Field(default="USD", min_length=1, max_length=8)
+
+
+class AssetOut(BaseModel):
+    id: int
+    ticker: str
+    name: str
+    asset_class: str
+    sector: str
+    country: str
+    currency: str
+
+
+class PositionCreate(BaseModel):
+    ticker: str = Field(min_length=1)
+    quantity: float = Field(gt=0)
+    avg_cost: float = Field(gt=0)
+    opened_at: datetime | None = None
+
+
+class PositionOutFull(BaseModel):
+    id: int
+    ticker: str
+    quantity: float
+    avg_cost: float
+    opened_at: datetime
+    status: str
+
+
+class TransactionCreate(BaseModel):
+    ticker: str = Field(min_length=1)
+    type: str = Field(pattern="^(buy|sell)$")
+    quantity: float = Field(gt=0)
+    price: float = Field(gt=0)
+    fee: float = Field(default=0.0, ge=0)
+    executed_at: datetime | None = None
+
+
+class IngestionResult(BaseModel):
+    source: str
+    promoted: int
+    quarantined: int
+    message: str

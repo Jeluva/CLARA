@@ -86,7 +86,9 @@ cd frontend && npm test
 - [x] **Fase 4 — Pestaña Portfolio:** dashboard principal con KPIs de valor/P&L,
       evolución vs. benchmark, panel de riesgo, donuts de exposición y tabla de
       posiciones, consumiendo la API con datos reales.
-- [ ] Fase 5 — Ingreso de datos
+- [x] **Fase 5 — Ingreso de datos:** CRUD de activos/posiciones/transacciones
+      con validación en el service, formularios end-to-end (cargás y aparece en
+      Portfolio) y botón de ingestión idempotente.
 - [ ] Fase 6 — Noticias & Sentimiento
 - [ ] Fase 7 — Research y Macro
 - [ ] Fase 8 — Pulido + publicación
