@@ -79,7 +79,10 @@ cd frontend && npm test
 - [x] **Fase 2 — Analytics:** motor de métricas (rendimiento, volatilidad,
       drawdown, Sharpe, beta, exposición, Herfindahl, correlación) como
       funciones puras, 47 tests con valores verificados a mano.
-- [ ] Fase 3 — API
+- [x] **Fase 3 — API:** capa de servicio (único puente DB ↔ analytics) y
+      routers FastAPI (`/api/portfolio`, `/metrics`, `/exposure`, `/history`,
+      `/research/correlation`) documentados en Swagger, con test de integración
+      sobre el seed.
 - [ ] Fase 4 — Pestaña Portfolio
 - [ ] Fase 5 — Ingreso de datos
 - [ ] Fase 6 — Noticias & Sentimiento
