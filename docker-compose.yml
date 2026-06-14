@@ -1,0 +1,25 @@
+# Optional Postgres for production. Dev uses SQLite (no Docker needed).
+# To use it: bring this up, then point the backend at it:
+#   DATABASE_URL=postgresql+psycopg://clara:clara@localhost:5432/clara
+#   cd backend && alembic upgrade head && python -m app.storage.seed_cli
+# The schema is identical to SQLite — only the connection string changes.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: clara-postgres
+    environment:
+      POSTGRES_USER: clara
+      POSTGRES_PASSWORD: clara
+      POSTGRES_DB: clara
+    ports:
+      - "5432:5432"
+    volumes:
+      - clara_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clara"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  clara_pgdata:
