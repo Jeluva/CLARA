@@ -110,24 +110,14 @@ export function DataEntryPage() {
 
       <Card title="Ingestión" subtitle="Forzar la ingesta de una fuente" className="mt-5">
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            variant="ghost"
-            onClick={async () => {
-              try {
-                const r = await runIngestion("prices");
-                notify("ok", r.message);
-                await reload();
-              } catch (e) {
-                notify("error", describe(e));
-              }
-            }}
-          >
-            Forzar ingestión de precios
-          </Button>
-          <span className="text-xs text-secondary">
-            Fuente mock determinística (sin red). Noticias y transcripciones:
-            próximamente.
-          </span>
+          {(["prices", "news"] as const).map((source) => (
+            <IngestionButton
+              key={source}
+              label={source === "prices" ? "Ingestar precios" : "Ingestar noticias"}
+              source={source}
+              onResult={(msg, ok) => notify(ok ? "ok" : "error", msg)}
+            />
+          ))}
         </div>
       </Card>
 
@@ -351,6 +341,37 @@ function PositionForm({
         </div>
       </form>
     </Card>
+  );
+}
+
+function IngestionButton({
+  label,
+  source,
+  onResult,
+}: {
+  label: string;
+  source: string;
+  onResult: (msg: string, ok: boolean) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="ghost"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const r = await runIngestion(source);
+          onResult(r.message, true);
+        } catch (e) {
+          onResult(e instanceof Error ? e.message : "Error", false);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? "Procesando…" : label}
+    </Button>
   );
 }
 

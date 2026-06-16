@@ -13,8 +13,8 @@ from app.api.schemas import (
     PositionOutFull,
     TransactionCreate,
 )
-from app.ingestion.news import run_mock_news_ingestion
-from app.ingestion.prices import run_mock_price_ingestion
+from app.ingestion.news import run_news_ingestion
+from app.ingestion.prices import run_price_ingestion
 from app.ingestion.transcripts import run_mock_transcript_ingestion
 from app.services import asset_service
 from app.services import crud_service as crud
@@ -133,8 +133,8 @@ def create_transaction(
 
 
 _INGESTORS = {
-    "prices": (run_mock_price_ingestion, "precios"),
-    "news": (run_mock_news_ingestion, "noticias"),
+    "prices": (run_price_ingestion, "precios"),
+    "news": (run_news_ingestion, "noticias"),
     "transcripts": (run_mock_transcript_ingestion, "transcripciones"),
 }
 
