@@ -43,13 +43,18 @@ class Settings(BaseSettings):
     news_api_key: str = ""
     youtube_api_key: str = ""
 
-    # Anthropic (Claude) — opcional, si está configurado tiene prioridad.
-    anthropic_api_key: str = ""
+    # Qwen (Alibaba DashScope) — prioridad principal para el chatbot.
+    # Key en: dashscope.aliyuncs.com → Consola → API Key
+    qwen_api_key: str = ""
+    qwen_model: str = "qwen-plus"   # opciones: qwen-turbo, qwen-plus, qwen-max
 
-    # Google Gemini — gratis, usado por defecto si no hay key de Anthropic.
+    # Google Gemini — fallback si no hay key de Qwen.
     gemini_api_key: str = ""
 
-    # Modelo a usar. Defaults: gemini-2.0-flash (gratis) o claude-opus-4-8.
+    # Anthropic (Claude) — fallback final.
+    anthropic_api_key: str = ""
+
+    # chat_model sobrescribe el modelo del provider activo si se especifica.
     chat_model: str = ""
 
     # Ingestion behaviour. During unattended dev runs we never hit the network.
