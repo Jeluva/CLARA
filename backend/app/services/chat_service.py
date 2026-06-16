@@ -1,11 +1,13 @@
 """Fundamental-analysis chatbot.
 
 Provider priority:
-  1. Anthropic (Claude) — if ANTHROPIC_API_KEY is set.
-  2. Google Gemini    — if GEMINI_API_KEY is set (free tier: 1500 req/day).
+  1. Qwen (Alibaba DashScope) — if QWEN_API_KEY is set. Default model: qwen-plus.
+  2. Google Gemini            — if GEMINI_API_KEY is set.
+  3. Anthropic (Claude)       — if ANTHROPIC_API_KEY is set.
+  4. Static analysis          — rule-based fallback, always works.
 
-If neither key is configured the endpoint returns a descriptive message
-so the app runs out of the box and lights up the moment a key is added.
+DashScope uses an OpenAI-compatible API so we use the openai SDK with a
+custom base_url. Key: dashscope.aliyuncs.com → Consola → API Key.
 """
 
 from __future__ import annotations
@@ -103,6 +105,33 @@ def _build_asset_context(db: Session, ticker: str) -> str:
         lines.append("Sin noticias recientes para este activo.")
 
     return "\n".join(lines)
+
+
+def _reply_qwen(context: str, messages: list[ChatMessage]) -> dict | None:
+    """Returns None on quota/rate-limit so caller can try the next provider."""
+    from openai import OpenAI, APIStatusError
+    model = settings.chat_model or settings.qwen_model
+    client = OpenAI(
+        api_key=settings.qwen_api_key,
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    system = f"{SYSTEM_PROMPT}\n\nCONTEXTO DEL ACTIVO:\n{context}"
+    api_messages = [{"role": "system", "content": system}]
+    api_messages += [{"role": m.role, "content": m.content} for m in messages]
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=api_messages,
+            max_tokens=2000,
+        )
+        text = response.choices[0].message.content or ""
+        return {"reply": text.strip(), "configured": True}
+    except APIStatusError as exc:
+        if exc.status_code in (429, 402):
+            return None  # quota/billing — fall through
+        return {"reply": f"No se pudo contactar a Qwen: {exc}", "configured": True, "error": True}
+    except Exception as exc:
+        return {"reply": f"No se pudo contactar a Qwen: {exc}", "configured": True, "error": True}
 
 
 def _reply_anthropic(context: str, messages: list[ChatMessage]) -> dict:
@@ -231,6 +260,11 @@ def fundamental_analysis(
     db: Session, ticker: str, messages: list[ChatMessage]
 ) -> dict:
     context = _build_asset_context(db, ticker)
+
+    if settings.qwen_api_key:
+        result = _reply_qwen(context, messages)
+        if result is not None:
+            return result
 
     if settings.gemini_api_key:
         result = _reply_gemini(context, messages)
