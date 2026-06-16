@@ -13,8 +13,8 @@ import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from app.ingestion.news import run_mock_news_ingestion
-from app.ingestion.prices import run_mock_price_ingestion
+from app.ingestion.news import run_news_ingestion
+from app.ingestion.prices import run_price_ingestion
 from app.ingestion.transcripts import run_mock_transcript_ingestion
 from app.storage.database import SessionLocal
 
@@ -42,14 +42,14 @@ def build_scheduler() -> BackgroundScheduler:
 
     # Prices: weekdays shortly after the US market close (21:10 UTC).
     scheduler.add_job(
-        lambda: _run("prices", run_mock_price_ingestion),
+        lambda: _run("prices", run_price_ingestion),
         CronTrigger(day_of_week="mon-fri", hour=21, minute=10),
         id="ingest_prices",
         replace_existing=True,
     )
     # News: every 4 hours.
     scheduler.add_job(
-        lambda: _run("news", run_mock_news_ingestion),
+        lambda: _run("news", run_news_ingestion),
         CronTrigger(hour="*/4"),
         id="ingest_news",
         replace_existing=True,
