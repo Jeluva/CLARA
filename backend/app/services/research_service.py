@@ -6,7 +6,7 @@ import math
 
 from sqlalchemy.orm import Session
 
-from app.analytics.indicators import rsi, sma
+from app.analytics.indicators import macd, rsi, sma
 from app.services.market_data import price_series_by_ticker
 
 
@@ -28,6 +28,7 @@ def get_indicators(db: Session, ticker: str) -> dict:
     sma20 = sma(closes, 20)
     sma50 = sma(closes, 50)
     rsi14 = rsi(closes, 14)
+    macd_line, signal_line, hist = macd(closes)
 
     points = [
         {
@@ -36,6 +37,9 @@ def get_indicators(db: Session, ticker: str) -> dict:
             "sma20": _clean(sma20[i]),
             "sma50": _clean(sma50[i]),
             "rsi": _clean(rsi14[i]),
+            "macd": _clean(macd_line[i]),
+            "macd_signal": _clean(signal_line[i]),
+            "macd_hist": _clean(hist[i]),
         }
         for i, idx in enumerate(series.index)
     ]
