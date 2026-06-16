@@ -1,8 +1,10 @@
-"""Mock news ingestion: realistic English financial headlines per ticker.
+"""News ingestion: real data via NewsAPI, with a mock fallback.
 
-Headlines are English (plausible for US-listed names / CEDEARs) so VADER scores
-them for real — the sentiment is computed, not hardcoded. Same medallion path as
-prices: build payloads -> bronze -> validate -> promote. Idempotent on the URL.
+Real mode (USE_MOCK_SOURCES=false, NEWS_API_KEY set): queries NewsAPI for each
+asset ticker, scores sentiment with VADER, and pushes through the medallion
+pipeline. Free tier: 100 req/day — with 8 assets that's ~12 runs/day headroom.
+
+Mock mode: static fixture headlines scored by real VADER (original behaviour).
 """
 
 from __future__ import annotations
@@ -10,18 +12,101 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timedelta, timezone
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.ingestion.sentiment import score
 from app.quality.promote import PromotionResult, promote_bronze
 from app.storage.models.bronze import BronzeRecord
+from app.storage.models.silver import Asset
 
-# (ticker, title, summary, source, days_ago)
+_NEWSAPI_URL = "https://newsapi.org/v2/everything"
+
+
+def _today() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+# ---------------------------------------------------------------------------
+# Real ingestion
+# ---------------------------------------------------------------------------
+
+def _run_real_news_ingestion(db: Session) -> PromotionResult:
+    assets = db.execute(select(Asset)).scalars().all()
+
+    for asset in assets:
+        ticker = asset.ticker.upper()
+        try:
+            resp = httpx.get(
+                _NEWSAPI_URL,
+                params={
+                    "q": ticker,
+                    "apiKey": settings.news_api_key,
+                    "language": "en",
+                    "pageSize": 5,
+                    "sortBy": "publishedAt",
+                },
+                timeout=10,
+            )
+            resp.raise_for_status()
+            articles = resp.json().get("articles", [])
+        except Exception:
+            continue
+
+        for art in articles:
+            url = art.get("url") or ""
+            if not url:
+                continue
+            title = art.get("title") or ""
+            summary = art.get("description") or ""
+            source = (art.get("source") or {}).get("name", "NewsAPI")
+            pub_str = art.get("publishedAt") or ""
+
+            try:
+                pub_dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                pub_dt = datetime.now(timezone.utc)
+
+            sentiment_score = score(f"{title}. {summary}")
+            dedupe = url[:200]
+
+            already = db.execute(
+                select(BronzeRecord).where(
+                    BronzeRecord.source_table == "news",
+                    BronzeRecord.dedupe_key == dedupe,
+                )
+            ).scalar_one_or_none()
+            if already is not None:
+                continue
+
+            db.add(BronzeRecord(
+                source_table="news",
+                source=source,
+                dedupe_key=dedupe,
+                payload=json.dumps({
+                    "ticker": ticker,
+                    "title": title,
+                    "summary": summary,
+                    "url": url,
+                    "source": source,
+                    "sentiment": sentiment_score,
+                    "published_at": pub_dt.date().isoformat(),
+                }),
+            ))
+
+    db.commit()
+    return promote_bronze(db)
+
+
+# ---------------------------------------------------------------------------
+# Mock ingestion (original fixture set)
+# ---------------------------------------------------------------------------
+
 _HEADLINES: list[tuple[str, str, str, str, int]] = [
     ("AAPL", "Apple shares surge to record high on strong earnings beat",
-     "iPhone demand and services revenue topped Wall Street estimates.",
-     "MarketWatch", 1),
+     "iPhone demand and services revenue topped Wall Street estimates.", "MarketWatch", 1),
     ("AAPL", "Analysts raise Apple price targets after blockbuster quarter",
      "Several firms lifted targets citing resilient margins.", "Reuters", 4),
     ("AAPL", "Apple faces antitrust scrutiny over App Store fees",
@@ -53,18 +138,13 @@ _HEADLINES: list[tuple[str, str, str, str, int]] = [
 ]
 
 
-def _today() -> date:
-    return datetime.now(timezone.utc).date()
-
-
 def run_mock_news_ingestion(db: Session) -> PromotionResult:
-    """Ingest the mock headline set, scoring sentiment with VADER."""
     today = _today()
     for ticker, title, summary, source, days_ago in _HEADLINES:
         published = today - timedelta(days=days_ago)
         slug = title.lower().replace(" ", "-")[:60]
         url = f"https://mock.news/{ticker.lower()}/{slug}"
-        sentiment = score(f"{title}. {summary}")
+        sentiment_score = score(f"{title}. {summary}")
         dedupe = url
         already = db.execute(
             select(BronzeRecord).where(
@@ -74,23 +154,29 @@ def run_mock_news_ingestion(db: Session) -> PromotionResult:
         ).scalar_one_or_none()
         if already is not None:
             continue
-        db.add(
-            BronzeRecord(
-                source_table="news",
-                source=source,
-                dedupe_key=dedupe,
-                payload=json.dumps(
-                    {
-                        "ticker": ticker,
-                        "title": title,
-                        "summary": summary,
-                        "url": url,
-                        "source": source,
-                        "sentiment": sentiment,
-                        "published_at": published.isoformat(),
-                    }
-                ),
-            )
-        )
+        db.add(BronzeRecord(
+            source_table="news",
+            source=source,
+            dedupe_key=dedupe,
+            payload=json.dumps({
+                "ticker": ticker,
+                "title": title,
+                "summary": summary,
+                "url": url,
+                "source": source,
+                "sentiment": sentiment_score,
+                "published_at": published.isoformat(),
+            }),
+        ))
     db.commit()
     return promote_bronze(db)
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+def run_news_ingestion(db: Session) -> PromotionResult:
+    if settings.use_mock_sources or not settings.news_api_key:
+        return run_mock_news_ingestion(db)
+    return _run_real_news_ingestion(db)
