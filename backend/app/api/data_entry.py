@@ -16,6 +16,7 @@ from app.api.schemas import (
 from app.ingestion.news import run_mock_news_ingestion
 from app.ingestion.prices import run_mock_price_ingestion
 from app.ingestion.transcripts import run_mock_transcript_ingestion
+from app.services import asset_service
 from app.services import crud_service as crud
 from app.storage.database import get_db
 
@@ -37,6 +38,15 @@ def create_asset(body: AssetCreate, db: Session = Depends(get_db)) -> AssetOut:
     except crud.ConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return AssetOut(**asset.__dict__)
+
+
+@router.get("/api/assets/{ticker}/summary")
+def asset_summary(ticker: str, db: Session = Depends(get_db)) -> dict:
+    """Aggregated per-asset snapshot for the asset detail page."""
+    summary = asset_service.get_asset_summary(db, ticker)
+    if summary is None:
+        raise HTTPException(status_code=404, detail=f"No existe el activo {ticker}")
+    return summary
 
 
 @router.delete("/api/assets/{asset_id}", status_code=204, response_class=Response)

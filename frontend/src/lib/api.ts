@@ -224,6 +224,9 @@ export interface IndicatorPoint {
   sma20: number | null;
   sma50: number | null;
   rsi: number | null;
+  macd: number | null;
+  macd_signal: number | null;
+  macd_hist: number | null;
 }
 
 export interface Indicators {
@@ -243,3 +246,46 @@ export interface MacroCard {
 export const getIndicators = (ticker: string) =>
   apiGet<Indicators>(`/research/indicators?ticker=${ticker}`);
 export const getMacro = () => apiGet<MacroCard[]>("/macro");
+
+// --- Asset detail + chatbot --------------------------------------------------
+
+export interface AssetPosition {
+  quantity: number;
+  avg_cost: number;
+  market_value: number;
+  pnl: number;
+  pnl_pct: number;
+}
+
+export interface AssetSummary {
+  ticker: string;
+  name: string;
+  asset_class: string;
+  sector: string;
+  country: string;
+  currency: string;
+  latest_price: number | null;
+  total_return: number | null;
+  volatility: number | null;
+  max_drawdown: number | null;
+  position: AssetPosition | null;
+  news_count: number;
+  avg_sentiment: number | null;
+}
+
+export const getAssetSummary = (ticker: string) =>
+  apiGet<AssetSummary>(`/assets/${ticker}/summary`);
+
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatResponse {
+  reply: string;
+  configured: boolean;
+  error: boolean;
+}
+
+export const postChat = (ticker: string, messages: ChatTurn[]) =>
+  apiPost<ChatResponse>("/chat/fundamental", { ticker, messages });

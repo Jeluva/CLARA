@@ -24,6 +24,44 @@ def sma(prices: Sequence[float], window: int) -> np.ndarray:
     return out
 
 
+def ema(prices: Sequence[float], period: int) -> np.ndarray:
+    """Exponential moving average, seeded with the first price.
+
+    alpha = 2/(period+1); EMA[0] = price[0]; EMA[t] = a*price[t] + (1-a)*EMA[t-1].
+    """
+    arr = np.asarray(prices, dtype=float)
+    n = arr.size
+    out = np.full(n, np.nan)
+    if n == 0 or period <= 0:
+        return out
+    alpha = 2.0 / (period + 1.0)
+    out[0] = arr[0]
+    for i in range(1, n):
+        out[i] = alpha * arr[i] + (1.0 - alpha) * out[i - 1]
+    return out
+
+
+def macd(
+    prices: Sequence[float],
+    fast: int = 12,
+    slow: int = 26,
+    signal: int = 9,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """MACD: (macd_line, signal_line, histogram), all aligned to `prices`.
+
+    macd_line = EMA(fast) - EMA(slow); signal_line = EMA(signal) of macd_line;
+    histogram = macd_line - signal_line.
+    """
+    arr = np.asarray(prices, dtype=float)
+    if arr.size == 0:
+        empty = np.array([], dtype=float)
+        return empty, empty, empty
+    macd_line = ema(arr, fast) - ema(arr, slow)
+    signal_line = ema(macd_line, signal)
+    histogram = macd_line - signal_line
+    return macd_line, signal_line, histogram
+
+
 def rsi(prices: Sequence[float], period: int = 14) -> np.ndarray:
     """Relative Strength Index over `period` using simple average gain/loss.
 

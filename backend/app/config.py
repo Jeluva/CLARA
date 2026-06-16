@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     news_api_key: str = ""
     youtube_api_key: str = ""
 
+    # Anthropic (Claude) for the fundamental-analysis chatbot. Empty => the chat
+    # endpoint returns a documented "configure your key" message instead of 500.
+    anthropic_api_key: str = ""
+    chat_model: str = "claude-opus-4-8"
+
     # Ingestion behaviour. During unattended dev runs we never hit the network.
     use_mock_sources: bool = True
 

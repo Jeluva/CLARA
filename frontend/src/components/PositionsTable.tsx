@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import type { Position } from "@/lib/api";
 import {
   formatCurrency,
@@ -10,6 +11,7 @@ import {
 
 /** Dense, right-aligned-numbers position table sorted by market value. */
 export function PositionsTable({ positions }: { positions: Position[] }) {
+  const navigate = useNavigate();
   const rows = [...positions].sort((a, b) => b.market_value - a.market_value);
 
   return (
@@ -31,10 +33,16 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
           {rows.map((p) => (
             <tr
               key={p.ticker}
-              className="border-b border-separator/50 transition-colors hover:bg-separator/30"
+              onClick={() => navigate(`/activo/${p.ticker}`)}
+              className="cursor-pointer border-b border-separator/50 transition-colors hover:bg-separator/30"
             >
               <td className="px-2 py-2.5">
-                <div className="font-medium text-primary">{p.ticker}</div>
+                <div className="flex items-center gap-1 font-medium text-accent">
+                  {p.ticker}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </div>
                 <div className="text-xs text-secondary">{p.sector}</div>
               </td>
               <td className="tabnum px-2 py-2.5 text-right text-secondary">

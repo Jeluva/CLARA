@@ -144,3 +144,22 @@ class TranscriptOut(BaseModel):
     sentiment: float
     sentiment_label: str
     published_at: str
+
+
+# --- Chatbot ------------------------------------------------------------------
+
+
+class ChatTurn(BaseModel):
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1)
+
+
+class ChatRequest(BaseModel):
+    ticker: str = Field(min_length=1)
+    messages: list[ChatTurn] = Field(min_length=1)
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    configured: bool
+    error: bool = False
