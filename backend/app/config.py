@@ -43,18 +43,21 @@ class Settings(BaseSettings):
     news_api_key: str = ""
     youtube_api_key: str = ""
 
-    # Qwen (Alibaba DashScope) — prioridad principal para el chatbot.
-    # Key en: dashscope.aliyuncs.com → Consola → API Key
-    qwen_api_key: str = ""
-    qwen_model: str = "qwen-plus"   # opciones: qwen-turbo, qwen-plus, qwen-max
+    # Groq — prioridad 1. Free tier: 14.400 req/día. Key: console.groq.com
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.3-70b-versatile"
 
-    # Google Gemini — fallback si no hay key de Qwen.
+    # Qwen (Alibaba DashScope) — prioridad 2. Key: dashscope.aliyuncs.com
+    qwen_api_key: str = ""
+    qwen_model: str = "qwen-plus"
+
+    # Google Gemini — prioridad 3. Key: aistudio.google.com
     gemini_api_key: str = ""
 
-    # Anthropic (Claude) — fallback final.
+    # Anthropic (Claude) — prioridad 4. Key: console.anthropic.com
     anthropic_api_key: str = ""
 
-    # chat_model sobrescribe el modelo del provider activo si se especifica.
+    # Sobrescribe el modelo del provider activo si se especifica.
     chat_model: str = ""
 
     # Ingestion behaviour. During unattended dev runs we never hit the network.
