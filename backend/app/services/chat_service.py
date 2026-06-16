@@ -1,13 +1,13 @@
 """Fundamental-analysis chatbot.
 
-Provider priority:
-  1. Qwen (Alibaba DashScope) — if QWEN_API_KEY is set. Default model: qwen-plus.
-  2. Google Gemini            — if GEMINI_API_KEY is set.
-  3. Anthropic (Claude)       — if ANTHROPIC_API_KEY is set.
-  4. Static analysis          — rule-based fallback, always works.
+Provider priority (first key set wins; falls through on quota/rate-limit):
+  1. Groq       — GROQ_API_KEY.    Free: 14.400 req/día. console.groq.com
+  2. Qwen       — QWEN_API_KEY.    Free tier. dashscope.aliyuncs.com
+  3. Gemini     — GEMINI_API_KEY.  Free tier. aistudio.google.com
+  4. Anthropic  — ANTHROPIC_API_KEY. console.anthropic.com
+  5. Static     — análisis regla-base, siempre disponible sin key.
 
-DashScope uses an OpenAI-compatible API so we use the openai SDK with a
-custom base_url. Key: dashscope.aliyuncs.com → Consola → API Key.
+Groq y Qwen usan el openai SDK con base_url personalizada (API compatible).
 """
 
 from __future__ import annotations
@@ -107,14 +107,17 @@ def _build_asset_context(db: Session, ticker: str) -> str:
     return "\n".join(lines)
 
 
-def _reply_qwen(context: str, messages: list[ChatMessage]) -> dict | None:
-    """Returns None on quota/rate-limit so caller can try the next provider."""
+def _reply_openai_compat(
+    context: str,
+    messages: list[ChatMessage],
+    api_key: str,
+    base_url: str,
+    model: str,
+    provider: str,
+) -> dict | None:
+    """Generic OpenAI-compatible call. Returns None on quota/rate-limit."""
     from openai import OpenAI, APIStatusError
-    model = settings.chat_model or settings.qwen_model
-    client = OpenAI(
-        api_key=settings.qwen_api_key,
-        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-    )
+    client = OpenAI(api_key=api_key, base_url=base_url)
     system = f"{SYSTEM_PROMPT}\n\nCONTEXTO DEL ACTIVO:\n{context}"
     api_messages = [{"role": "system", "content": system}]
     api_messages += [{"role": m.role, "content": m.content} for m in messages]
@@ -128,10 +131,30 @@ def _reply_qwen(context: str, messages: list[ChatMessage]) -> dict | None:
         return {"reply": text.strip(), "configured": True}
     except APIStatusError as exc:
         if exc.status_code in (429, 402):
-            return None  # quota/billing — fall through
-        return {"reply": f"No se pudo contactar a Qwen: {exc}", "configured": True, "error": True}
+            return None
+        return {"reply": f"Error de {provider}: {exc.message}", "configured": True, "error": True}
     except Exception as exc:
-        return {"reply": f"No se pudo contactar a Qwen: {exc}", "configured": True, "error": True}
+        return {"reply": f"Error de {provider}: {exc}", "configured": True, "error": True}
+
+
+def _reply_groq(context: str, messages: list[ChatMessage]) -> dict | None:
+    return _reply_openai_compat(
+        context, messages,
+        api_key=settings.groq_api_key,
+        base_url="https://api.groq.com/openai/v1",
+        model=settings.chat_model or settings.groq_model,
+        provider="Groq",
+    )
+
+
+def _reply_qwen(context: str, messages: list[ChatMessage]) -> dict | None:
+    return _reply_openai_compat(
+        context, messages,
+        api_key=settings.qwen_api_key,
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        model=settings.chat_model or settings.qwen_model,
+        provider="Qwen",
+    )
 
 
 def _reply_anthropic(context: str, messages: list[ChatMessage]) -> dict:
@@ -260,6 +283,11 @@ def fundamental_analysis(
     db: Session, ticker: str, messages: list[ChatMessage]
 ) -> dict:
     context = _build_asset_context(db, ticker)
+
+    if settings.groq_api_key:
+        result = _reply_groq(context, messages)
+        if result is not None:
+            return result
 
     if settings.qwen_api_key:
         result = _reply_qwen(context, messages)
