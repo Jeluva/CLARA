@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from sqlalchemy.orm import Session
 
 from app.services import chat_service
@@ -12,11 +14,15 @@ from app.storage.seed import seed_database
 
 def test_chat_without_key_returns_fallback_with_context(db: Session) -> None:
     seed_database(db)
-    result = chat_service.fundamental_analysis(
-        db, "AAPL", [ChatMessage(role="user", content="¿Qué es Apple?")]
-    )
+    with patch.object(chat_service, "settings") as mock_settings:
+        mock_settings.groq_api_key = ""
+        mock_settings.qwen_api_key = ""
+        mock_settings.gemini_api_key = ""
+        mock_settings.anthropic_api_key = ""
+        result = chat_service.fundamental_analysis(
+            db, "AAPL", [ChatMessage(role="user", content="¿Qué es Apple?")]
+        )
     assert result["configured"] is False
-    # The fallback still surfaces the assembled context so it's useful.
     assert "AAPL" in result["reply"]
     assert "Apple" in result["reply"]
 

@@ -69,7 +69,7 @@ sobre datos reales del seed (`beta(SPY, SPY) ≈ 1` como canario de alineación
 temporal).
 
 ```
-backend:  73 tests (pytest)      frontend:  7 tests (vitest)
+backend:  80 tests (pytest)      frontend:  7 tests (vitest)
 ```
 
 ## Stack
@@ -112,19 +112,20 @@ docker compose up -d                  # levanta Postgres 16
 cd backend && alembic upgrade head && python -m app.storage.seed_cli
 ```
 
-## Qué es real y qué es mock (honestidad de alcance)
+## Fuentes de datos
 
-Durante el desarrollo **toda la ingestión usa mocks determinísticos** (sin red):
+- **Precios:** yfinance (datos reales de mercado).
+- **Noticias:** NewsAPI (requiere API key en `.env`).
+- **Macro:** yfinance (índices, US 10Y) + dolarapi.com (dólar MEP/CCL/Blue).
+  Riesgo país y BADLAR usan valores de referencia estáticos.
+- **Transcripciones:** mock determinístico (youtube-transcript-api listo para
+  enchufar con API key).
+- **Chatbot IA:** Groq (Llama 3.3 70B) como provider prioritario, con fallback
+  a Qwen → Gemini → Anthropic → análisis estático. Sin API key funciona igual
+  con análisis regla-base.
 
-- **Precios:** movimiento browniano geométrico con semilla fija por ticker.
-- **Noticias/transcripciones:** fixtures en inglés, con sentimiento **calculado
-  por VADER de verdad** (no hardcodeado).
-- **Macro:** valores realistas pero estáticos, declarados como mock en la propia
-  pestaña.
-
-Cada fuente sigue el patrón `fetch → bronze → validar → promover`, así que
-enchufar la fuente real (yfinance, News API, `youtube-transcript-api`, dolarapi)
-es reemplazar **solo el paso de fetch**, sin tocar el resto del pipeline.
+Cada fuente sigue el patrón `fetch → bronze → validar → promover`. El modo mock
+está disponible con `USE_MOCK_SOURCES=true` para desarrollo sin red.
 
 ## Estado del proyecto
 
@@ -137,8 +138,14 @@ es reemplazar **solo el paso de fetch**, sin tocar el resto del pipeline.
 - [x] **Fase 6 — Noticias & Sentimiento** · ingestión + VADER + pestaña.
 - [x] **Fase 7 — Research & Macro** · correlación, indicadores, macro.
 - [x] **Fase 8 — Pulido** · scheduler, Docker, README, cierre.
+- [x] **Fase 9 — Chatbot IA** · análisis fundamental por activo + página de detalle.
+- [x] **Fase 10 — Datos reales** · yfinance, NewsAPI, dolarapi enchufados.
+- [x] **Fase 11 — Ingestion conectada** · pipeline real end-to-end + chatbot con fallback.
+- [x] **Chatbot multi-provider** · Groq (Llama 3.3) → Qwen → Gemini → Anthropic → estático.
+- [x] **Comparador de activos** · métricas lado a lado en Research.
+- [x] **CI/CD** · GitHub Actions (pytest + tsc + vitest).
 
-## Qué aprendí / qué sigue
+## Qué aprendí
 
 - **Verificar a mano paga:** mi primer test de Sharpe falló por un error *mío* en
   la multiplicación del comentario, no en la función. Un test contra la propia
@@ -147,9 +154,8 @@ es reemplazar **solo el paso de fetch**, sin tocar el resto del pipeline.
   en "observabilidad del pipeline".
 - **Honestidad de alcance:** mock declarado + ADR que explica el camino real vale
   más que un gráfico bonito que no significa nada.
-- **Próximos pasos (V2):** fuentes reales enchufadas, sentimiento en español con
-  un LLM, serie de P&L realizada que respete el timing de entrada (ver
-  `docs/adr/0003`), y correlaciones sobre precios reales.
+- **Multi-provider LLM con fallback:** diseñar la cadena Groq → Qwen → Gemini →
+  Anthropic → estático hace que el chatbot siempre funcione, con o sin keys.
 
 ---
 

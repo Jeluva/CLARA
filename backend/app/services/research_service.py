@@ -44,3 +44,36 @@ def get_indicators(db: Session, ticker: str) -> dict:
         for i, idx in enumerate(series.index)
     ]
     return {"ticker": ticker.upper(), "points": points[-120:]}
+
+
+def compare_assets(db: Session, tickers: list[str]) -> list[dict]:
+    """Side-by-side comparison of key metrics for selected tickers."""
+    from app.analytics.returns import daily_returns, total_return
+    from app.analytics.risk import max_drawdown, sharpe_ratio, volatility
+
+    result = []
+    all_series = price_series_by_ticker(db, [t.upper() for t in tickers])
+
+    for ticker in tickers:
+        t = ticker.upper()
+        series = all_series.get(t)
+        if series is None or series.size < 2:
+            result.append({"ticker": t, "data_points": 0})
+            continue
+
+        closes = series.to_numpy(dtype=float)
+        rets = daily_returns(closes)
+        recent = closes[-21:] if closes.size >= 21 else closes
+
+        result.append({
+            "ticker": t,
+            "data_points": int(series.size),
+            "latest_price": round(float(closes[-1]), 2),
+            "total_return": round(float(total_return(closes) * 100), 2),
+            "return_1m": round(float(total_return(recent) * 100), 2),
+            "volatility": round(float(volatility(rets) * 100), 2),
+            "max_drawdown": round(float(max_drawdown(closes) * 100), 2),
+            "sharpe": round(float(sharpe_ratio(rets)), 2),
+        })
+
+    return result

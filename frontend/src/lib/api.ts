@@ -176,6 +176,17 @@ export const deletePosition = (id: number) => apiDelete(`/positions/${id}`);
 export const runIngestion = (source: string) =>
   apiPost<IngestionResult>(`/ingestion/run?source=${source}`, {});
 
+export interface TransactionCreate {
+  ticker: string;
+  type: "buy" | "sell";
+  quantity: number;
+  price: number;
+  fee: number;
+}
+
+export const createTransaction = (body: TransactionCreate) =>
+  apiPost<{ id: number; status: string }>("/transactions", body);
+
 // --- News & sentiment --------------------------------------------------------
 
 export type SentimentLabel = "positive" | "neutral" | "negative";
@@ -210,10 +221,18 @@ export interface Transcript {
   published_at: string;
 }
 
+export interface SentimentPoint {
+  date: string;
+  score: number;
+  count: number;
+}
+
 export const getNews = (ticker?: string) =>
   apiGet<NewsItem[]>(`/news${ticker ? `?ticker=${ticker}` : ""}`);
 export const getNewsSentiment = () =>
   apiGet<TickerSentiment[]>("/news/sentiment");
+export const getSentimentSeries = (ticker?: string) =>
+  apiGet<SentimentPoint[]>(`/news/sentiment/series${ticker ? `?ticker=${ticker}` : ""}`);
 export const getTranscripts = () => apiGet<Transcript[]>("/transcripts");
 
 // --- Research & Macro --------------------------------------------------------
@@ -245,6 +264,20 @@ export interface MacroCard {
 
 export const getIndicators = (ticker: string) =>
   apiGet<Indicators>(`/research/indicators?ticker=${ticker}`);
+
+export interface AssetComparison {
+  ticker: string;
+  data_points: number;
+  latest_price?: number;
+  total_return?: number;
+  return_1m?: number;
+  volatility?: number;
+  max_drawdown?: number;
+  sharpe?: number;
+}
+
+export const compareAssets = (tickers: string[]) =>
+  apiGet<AssetComparison[]>(`/research/compare?tickers=${tickers.join(",")}`);
 export const getMacro = () => apiGet<MacroCard[]>("/macro");
 
 // --- Asset detail + chatbot --------------------------------------------------

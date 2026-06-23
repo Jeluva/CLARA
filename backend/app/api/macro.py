@@ -1,4 +1,4 @@
-"""Macro endpoints (mock data — see macro_service / README)."""
+"""Macro endpoints: reference indices, FX and rates (live + fallback)."""
 
 from __future__ import annotations
 

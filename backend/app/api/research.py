@@ -23,3 +23,10 @@ def correlation(db: Session = Depends(get_db)) -> CorrelationOut:
 def indicators(ticker: str, db: Session = Depends(get_db)) -> dict:
     """Price series with SMA(20), SMA(50) and RSI(14) for one ticker."""
     return research_service.get_indicators(db, ticker)
+
+
+@router.get("/compare")
+def compare(tickers: str, db: Session = Depends(get_db)) -> list[dict]:
+    """Compare key metrics across multiple assets. Tickers comma-separated."""
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    return research_service.compare_assets(db, ticker_list)
