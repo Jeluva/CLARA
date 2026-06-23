@@ -27,7 +27,7 @@ y un chatbot IA multi-provider:
 ### Criterios de aceptación cumplidos
 - `alembic upgrade head` crea el esquema medallion; el seed deja un portfolio de
   ejemplo + ~1 año de precios + noticias + transcripciones, 0 en cuarentena.
-- **80 tests backend (pytest) + 7 frontend (vitest)** en verde.
+- **84 tests backend (pytest) + 16 frontend (vitest) = 100 tests** en verde.
 - Métricas financieras verificadas a mano + test de integración sobre el seed.
 - Endpoints documentados en Swagger (`/docs`).
 - CI/CD con GitHub Actions (pytest + tsc + vitest).
@@ -60,7 +60,7 @@ Todas las fuentes siguen `fetch → bronze → validar → promover`. El schedul
   separar performance del basket de performance de las decisiones de timing
   (ADR 0003).
 - Transcripciones reales con youtube-transcript-api.
-- Riesgo país y BADLAR con fuente machine-readable (BCRA API / Ámbito).
+- ~~Riesgo país y BADLAR~~ ✓ resuelto con argentinadatos.com.
 - Capturas finales en `docs/screenshots/` para el README.
 
 ## Cómo quedó para revisar

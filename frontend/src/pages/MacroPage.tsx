@@ -5,7 +5,7 @@ import { useApi } from "@/hooks/useApi";
 import { getMacro, type MacroCard } from "@/lib/api";
 import { formatNumber, formatSignedPercent, pnlColor } from "@/lib/format";
 
-/** Tab 4 — Macro: reference indices, FX and rates (mock). */
+/** Tab 4 — Macro: reference indices, FX and rates. */
 export function MacroPage() {
   const macro = useApi(getMacro);
 
