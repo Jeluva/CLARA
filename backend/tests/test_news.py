@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from app.ingestion.news import run_mock_news_ingestion
-from app.ingestion.sentiment import label, score
+from app.ingestion.sentiment import label, score, _is_spanish
 from app.ingestion.transcripts import run_mock_transcript_ingestion
 from app.services import news_service as svc
 from app.storage.models.silver import News
@@ -31,6 +31,21 @@ def test_sentiment_in_range_and_empty_neutral() -> None:
     assert -1.0 <= score("anything at all here") <= 1.0
     assert score("") == 0.0
     assert label(0.0) == "neutral"
+
+
+def test_is_spanish_detects_spanish_text() -> None:
+    assert _is_spanish("Las acciones del Merval subieron con fuerza por la baja del riesgo país")
+    assert _is_spanish("El dólar blue cerró estable pero los bonos operaron con volatilidad")
+    assert not _is_spanish("Apple shares surge to record high on strong earnings")
+    assert not _is_spanish("hi")
+
+
+def test_sentiment_spanish_falls_back_to_vader_without_keys() -> None:
+    from unittest.mock import patch
+    import app.ingestion.sentiment as mod
+    with patch.object(mod, "_score_llm", return_value=None):
+        s = score("Las acciones del Merval subieron con fuerza por la baja del riesgo país")
+        assert -1.0 <= s <= 1.0
 
 
 # --- Ingestion ---------------------------------------------------------------
