@@ -28,6 +28,14 @@ def news_sentiment(db: Session = Depends(get_db)) -> list[TickerSentimentOut]:
     return [TickerSentimentOut(**asdict(t)) for t in svc.sentiment_by_ticker(db)]
 
 
+@router.get("/news/sentiment/series")
+def sentiment_series(
+    ticker: str | None = None, db: Session = Depends(get_db)
+) -> list[dict]:
+    """Daily average sentiment over time, optionally filtered by ticker."""
+    return [asdict(p) for p in svc.sentiment_series(db, ticker)]
+
+
 @router.get("/transcripts", response_model=list[TranscriptOut])
 def transcripts(db: Session = Depends(get_db)) -> list[TranscriptOut]:
     """Summarised YouTube transcripts with sentiment."""

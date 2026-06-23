@@ -64,8 +64,8 @@ export function MacroPage() {
       </div>
 
       <p className="mt-4 text-xs text-secondary">
-        Datos mock (sin conexión en vivo). La fuente real (yfinance, dolarapi,
-        riesgo país) se enchufa sin tocar la UI — ver README.
+        Fuentes: yfinance (índices, US 10Y), dolarapi.com (dólar MEP/CCL/Blue).
+        Riesgo país y BADLAR usan valores de referencia estáticos.
       </p>
     </div>
   );

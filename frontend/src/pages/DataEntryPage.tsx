@@ -11,6 +11,7 @@ import {
   getPositions,
   createAsset,
   createPosition,
+  createTransaction,
   deleteAsset,
   deletePosition,
   runIngestion,
@@ -80,7 +81,7 @@ export function DataEntryPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <AssetForm
           assetClasses={ASSET_CLASSES}
           onCreate={async (body) => {
@@ -106,14 +107,30 @@ export function DataEntryPage() {
             }
           }}
         />
+
+        <TransactionForm
+          assets={assets}
+          onCreate={async (body) => {
+            try {
+              await createTransaction(body);
+              notify("ok", `Transacción ${body.type} de ${body.ticker} registrada.`);
+            } catch (e) {
+              notify("error", describe(e));
+            }
+          }}
+        />
       </div>
 
       <Card title="Ingestión" subtitle="Forzar la ingesta de una fuente" className="mt-5">
         <div className="flex flex-wrap items-center gap-3">
-          {(["prices", "news"] as const).map((source) => (
+          {([
+            { source: "prices", label: "Ingestar precios" },
+            { source: "news", label: "Ingestar noticias" },
+            { source: "transcripts", label: "Ingestar transcripciones" },
+          ] as const).map(({ source, label }) => (
             <IngestionButton
               key={source}
-              label={source === "prices" ? "Ingestar precios" : "Ingestar noticias"}
+              label={label}
               source={source}
               onResult={(msg, ok) => notify(ok ? "ok" : "error", msg)}
             />
@@ -337,6 +354,106 @@ function PositionForm({
         <div className="col-span-2 mt-1">
           <Button type="submit" disabled={busy || assets.length === 0}>
             {busy ? "Guardando…" : "Crear posición"}
+          </Button>
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function TransactionForm({
+  assets,
+  onCreate,
+}: {
+  assets: Asset[];
+  onCreate: (body: {
+    ticker: string;
+    type: "buy" | "sell";
+    quantity: number;
+    price: number;
+    fee: number;
+  }) => Promise<void>;
+}) {
+  const [ticker, setTicker] = useState("");
+  const [type, setType] = useState<"buy" | "sell">("buy");
+  const [quantity, setQuantity] = useState("");
+  const [price, setPrice] = useState("");
+  const [fee, setFee] = useState("0");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    await onCreate({
+      ticker: ticker || assets[0]?.ticker || "",
+      type,
+      quantity: Number(quantity),
+      price: Number(price),
+      fee: Number(fee),
+    });
+    setBusy(false);
+    setQuantity("");
+    setPrice("");
+    setFee("0");
+  }
+
+  return (
+    <Card title="Nueva transacción" subtitle="Registrar compra o venta">
+      <form onSubmit={submit} className="grid grid-cols-2 gap-3">
+        <Field label="Activo">
+          <Select value={ticker} onChange={(e) => setTicker(e.target.value)}>
+            {assets.length === 0 && <option value="">Sin activos</option>}
+            {assets.map((a) => (
+              <option key={a.id} value={a.ticker}>
+                {a.ticker}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Tipo">
+          <Select
+            value={type}
+            onChange={(e) => setType(e.target.value as "buy" | "sell")}
+          >
+            <option value="buy">Compra</option>
+            <option value="sell">Venta</option>
+          </Select>
+        </Field>
+        <Field label="Cantidad">
+          <Input
+            required
+            type="number"
+            step="any"
+            min="0"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="10"
+          />
+        </Field>
+        <Field label="Precio">
+          <Input
+            required
+            type="number"
+            step="any"
+            min="0"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="150.00"
+          />
+        </Field>
+        <Field label="Comisión">
+          <Input
+            type="number"
+            step="any"
+            min="0"
+            value={fee}
+            onChange={(e) => setFee(e.target.value)}
+            placeholder="0"
+          />
+        </Field>
+        <div className="col-span-2 mt-1">
+          <Button type="submit" disabled={busy || assets.length === 0}>
+            {busy ? "Guardando…" : "Registrar"}
           </Button>
         </div>
       </form>

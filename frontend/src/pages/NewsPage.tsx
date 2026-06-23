@@ -7,9 +7,22 @@ import { useApi } from "@/hooks/useApi";
 import {
   getNews,
   getNewsSentiment,
+  getSentimentSeries,
   getTranscripts,
   type NewsItem,
+  type SentimentPoint,
 } from "@/lib/api";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+  ReferenceLine,
+} from "recharts";
+import { colors } from "@/styles/theme";
 
 /** Tab 2 — Noticias & Sentimiento. */
 export function NewsPage() {
@@ -20,12 +33,21 @@ export function NewsPage() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState<string | null>(null);
+  const [series, setSeries] = useState<SentimentPoint[]>([]);
 
   useEffect(() => {
     let active = true;
     setNewsLoading(true);
-    getNews(ticker ?? undefined)
-      .then((d) => active && (setNews(d), setNewsError(null)))
+    Promise.all([
+      getNews(ticker ?? undefined),
+      getSentimentSeries(ticker ?? undefined),
+    ])
+      .then(([n, s]) => {
+        if (!active) return;
+        setNews(n);
+        setSeries(s);
+        setNewsError(null);
+      })
       .catch((e) => active && setNewsError(e?.message ?? "Error"))
       .finally(() => active && setNewsLoading(false));
     return () => {
@@ -74,6 +96,55 @@ export function NewsPage() {
           </div>
         )}
       </Card>
+
+      {series.length > 1 && (
+        <Card
+          title="Tendencia de sentimiento"
+          subtitle={ticker ? `Filtrado: ${ticker}` : "Todos los activos"}
+          className="mb-5"
+        >
+          <div className="h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={series} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
+                <CartesianGrid stroke={colors.separator} strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: colors.secondary, fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: colors.separator }}
+                  tickFormatter={(d: string) => d.slice(5)}
+                />
+                <YAxis
+                  domain={[-1, 1]}
+                  tick={{ fill: colors.secondary, fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={36}
+                />
+                <ReferenceLine y={0} stroke={colors.separator} />
+                <Tooltip
+                  contentStyle={{
+                    background: colors.surface,
+                    border: `1px solid ${colors.separator}`,
+                    borderRadius: 12,
+                    color: colors.primary,
+                    fontSize: 12,
+                  }}
+                  formatter={(value: number) => [value.toFixed(3), "Sentimiento"]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="score"
+                  stroke={colors.accent}
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* News feed */}

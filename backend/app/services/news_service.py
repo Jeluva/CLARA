@@ -82,6 +82,36 @@ def sentiment_by_ticker(db: Session) -> list[TickerSentiment]:
     return result
 
 
+@dataclass
+class SentimentPoint:
+    date: str
+    score: float
+    count: int
+
+
+def sentiment_series(db: Session, ticker: str | None = None) -> list[SentimentPoint]:
+    """Daily average sentiment, oldest first."""
+    query = select(News.published_at, News.sentiment)
+    if ticker:
+        query = query.join(Asset, Asset.id == News.asset_id).where(
+            Asset.ticker == ticker.upper()
+        )
+    rows = db.execute(query).all()
+    daily: dict[str, list[float]] = {}
+    for published_at, sentiment in rows:
+        day = published_at.date().isoformat()
+        daily.setdefault(day, []).append(sentiment)
+    result = [
+        SentimentPoint(
+            date=day,
+            score=round(sum(vals) / len(vals), 4),
+            count=len(vals),
+        )
+        for day, vals in sorted(daily.items())
+    ]
+    return result
+
+
 def list_transcripts(db: Session) -> list[dict]:
     rows = (
         db.execute(select(Transcript).order_by(Transcript.published_at.desc()))
