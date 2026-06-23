@@ -27,7 +27,7 @@ y un chatbot IA multi-provider:
 ### Criterios de aceptación cumplidos
 - `alembic upgrade head` crea el esquema medallion; el seed deja un portfolio de
   ejemplo + ~1 año de precios + noticias + transcripciones, 0 en cuarentena.
-- **84 tests backend (pytest) + 16 frontend (vitest) = 100 tests** en verde.
+- **87 tests backend (pytest) + 16 frontend (vitest) = 103 tests** en verde.
 - Métricas financieras verificadas a mano + test de integración sobre el seed.
 - Endpoints documentados en Swagger (`/docs`).
 - CI/CD con GitHub Actions (pytest + tsc + vitest).
@@ -53,14 +53,17 @@ Todas las fuentes siguen `fetch → bronze → validar → promover`. El schedul
 4. **0004** — Convenciones de anualización (252) y definición de Sharpe.
 5. **0005** — Sentimiento: VADER para inglés, LLM para español (V2).
 
-## Próximos pasos sugeridos (V2)
+## V2 completado
 
-- Sentimiento en español con un LLM (ADR 0005).
-- Serie de P&L **realizada** que respete `opened_at` y las transacciones, para
-  separar performance del basket de performance de las decisiones de timing
-  (ADR 0003).
-- Transcripciones reales con youtube-transcript-api.
-- ~~Riesgo país y BADLAR~~ ✓ resuelto con argentinadatos.com.
+- ~~Sentimiento en español con LLM~~ ✓ detección de idioma + Groq/Qwen (ADR 0005).
+- ~~Serie de P&L realizada~~ ✓ respeta `opened_at`, toggle Basket/Realizado (ADR 0003).
+- ~~Riesgo país y BADLAR~~ ✓ argentinadatos.com.
+- ~~Comparador de activos~~ ✓ métricas lado a lado en Research.
+- ~~Serie temporal de sentimiento~~ ✓ chart con tendencia en Noticias.
+
+## Pendiente opcional
+
+- Transcripciones reales con youtube-transcript-api (bloqueado por bug en la lib).
 - Capturas finales en `docs/screenshots/` para el README.
 
 ## Cómo quedó para revisar

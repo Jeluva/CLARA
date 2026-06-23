@@ -69,7 +69,7 @@ sobre datos reales del seed (`beta(SPY, SPY) ≈ 1` como canario de alineación
 temporal).
 
 ```
-backend:  86 tests (pytest)      frontend:  16 tests (vitest)
+backend:  87 tests (pytest)      frontend:  16 tests (vitest)
 ```
 
 ## Stack
