@@ -30,7 +30,7 @@ export function Chatbot({ ticker }: { ticker: string }) {
     try {
       const resp = await postChat(ticker, next);
       setMessages([...next, { role: "assistant", content: resp.reply }]);
-      setNotice(resp.configured ? null : "Modo demo — configurá ANTHROPIC_API_KEY para respuestas reales.");
+      setNotice(resp.configured ? null : "Modo estático — configurá GROQ_API_KEY en .env para respuestas conversacionales.");
     } catch (e) {
       setMessages([
         ...next,
