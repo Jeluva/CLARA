@@ -221,6 +221,72 @@ def get_history(db: Session) -> list[dict]:
     return out
 
 
+def get_realized_history(db: Session) -> list[dict]:
+    """P&L realizado: solo cuenta cada activo desde su opened_at.
+
+    A diferencia de get_history (que aplica tenencias actuales a toda la
+    historia), esta serie refleja el timing real de las decisiones de entrada.
+    """
+    positions = _held_positions(db)
+    if not positions:
+        return []
+
+    tickers = [a.ticker for a, _, _ in positions]
+    all_series = price_series_by_ticker(db, tickers)
+
+    opened_dates: dict[str, pd.Timestamp] = {}
+    costs: dict[str, float] = {}
+    quantities: dict[str, float] = {}
+    for asset, qty, avg_cost in positions:
+        rows = db.execute(
+            select(Position.opened_at)
+            .where(Position.asset_id == asset.id, Position.status == "open")
+        ).scalars().all()
+        earliest = min(rows) if rows else None
+        if earliest is not None:
+            opened_dates[asset.ticker] = pd.Timestamp(earliest).normalize()
+        costs[asset.ticker] = avg_cost
+        quantities[asset.ticker] = qty
+
+    # Build a DataFrame with prices, masking each ticker before its opened_at
+    frames: dict[str, pd.Series] = {}
+    for ticker in tickers:
+        series = all_series.get(ticker)
+        if series is None:
+            continue
+        opened = opened_dates.get(ticker)
+        if opened is not None:
+            series = series[series.index >= opened]
+        frames[ticker] = series
+
+    if not frames:
+        return []
+
+    price_df = pd.DataFrame(frames).sort_index()
+
+    out: list[dict] = []
+    for idx in price_df.index:
+        cost = 0.0
+        value = 0.0
+        for ticker in tickers:
+            if ticker not in price_df.columns:
+                continue
+            price = price_df.at[idx, ticker]
+            if pd.isna(price):
+                continue
+            qty = quantities[ticker]
+            cost += qty * costs[ticker]
+            value += qty * float(price)
+        if cost == 0:
+            continue
+        pnl_pct = value / cost - 1.0
+        out.append({
+            "date": idx.date().isoformat(),
+            "realized_pnl": round(pnl_pct, 6),
+        })
+    return out
+
+
 def get_correlation(db: Session) -> dict:
     """Correlation matrix of daily returns across held assets (NaN -> 0)."""
     inputs = _position_inputs(db)
