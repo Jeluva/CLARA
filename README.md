@@ -116,8 +116,8 @@ cd backend && alembic upgrade head && python -m app.storage.seed_cli
 
 - **Precios:** yfinance (datos reales de mercado).
 - **Noticias:** NewsAPI (requiere API key en `.env`).
-- **Macro:** yfinance (índices, US 10Y) + dolarapi.com (dólar MEP/CCL/Blue).
-  Riesgo país y BADLAR usan valores de referencia estáticos.
+- **Macro:** yfinance (índices, US 10Y) + dolarapi.com (dólar MEP/CCL/Blue) +
+  argentinadatos.com (riesgo país, BADLAR).
 - **Transcripciones:** mock determinístico (youtube-transcript-api listo para
   enchufar con API key).
 - **Chatbot IA:** Groq (Llama 3.3 70B) como provider prioritario, con fallback

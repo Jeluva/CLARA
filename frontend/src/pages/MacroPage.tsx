@@ -64,8 +64,8 @@ export function MacroPage() {
       </div>
 
       <p className="mt-4 text-xs text-secondary">
-        Fuentes: yfinance (índices, US 10Y), dolarapi.com (dólar MEP/CCL/Blue).
-        Riesgo país y BADLAR usan valores de referencia estáticos.
+        Fuentes: yfinance (índices, US 10Y), dolarapi.com (dólar),
+        argentinadatos.com (riesgo país, BADLAR).
       </p>
     </div>
   );

@@ -92,6 +92,55 @@ def _dolar_card(data: dict, casa: str, key: str, label: str, mock_value: float) 
     }
 
 
+def _fetch_riesgo_pais() -> dict | None:
+    """Fetch riesgo país from argentinadatos.com (public, no key)."""
+    try:
+        resp = httpx.get(
+            "https://api.argentinadatos.com/v1/finanzas/indices/riesgo-pais/ultimo",
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        value = float(data.get("valor", 0))
+        return {
+            "key": "riesgo_pais",
+            "label": "Riesgo País",
+            "value": round(value, 0),
+            "unit": "pb",
+            "change_pct": 0.0,
+            "group": "Tasas & Riesgo",
+        }
+    except Exception:
+        return None
+
+
+def _fetch_badlar() -> dict | None:
+    """Fetch BADLAR (tasa depósitos 30 días) from argentinadatos.com."""
+    try:
+        resp = httpx.get(
+            "https://api.argentinadatos.com/v1/finanzas/tasas/depositos30Dias",
+            timeout=5,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not data:
+            return None
+        last = data[-1]
+        value = float(last["valor"])
+        prev = float(data[-2]["valor"]) if len(data) >= 2 else value
+        change_pct = value - prev
+        return {
+            "key": "badlar",
+            "label": "BADLAR",
+            "value": round(value, 2),
+            "unit": "%",
+            "change_pct": round(change_pct, 2),
+            "group": "Tasas & Riesgo",
+        }
+    except Exception:
+        return None
+
+
 def _fetch_live() -> list[dict]:
     cards: list[dict] = []
 
@@ -111,14 +160,14 @@ def _fetch_live() -> list[dict]:
     cards.append(_dolar_card(dolar, "blue",            "blue", "Dólar Blue", 1270.0))
 
     # Tasas & Riesgo
-    # Riesgo país: no free REST endpoint; keep mock until BCRA/ambito integration.
-    cards.append(next(m for m in _MOCK if m["key"] == "riesgo_pais"))
+    rp = _fetch_riesgo_pais()
+    cards.append(rp or next(m for m in _MOCK if m["key"] == "riesgo_pais"))
 
     ust = _fetch_yf_card("^TNX", "ust10y", "US 10Y", "%", "Tasas & Riesgo")
     cards.append(ust or next(m for m in _MOCK if m["key"] == "ust10y"))
 
-    # BADLAR: no free machine-readable source; keep mock.
-    cards.append(next(m for m in _MOCK if m["key"] == "badlar"))
+    badlar = _fetch_badlar()
+    cards.append(badlar or next(m for m in _MOCK if m["key"] == "badlar"))
 
     return cards
 
