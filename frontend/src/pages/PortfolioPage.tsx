@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/Card";
 import { Metric } from "@/components/Metric";
@@ -12,6 +13,8 @@ import {
   getMetrics,
   getExposure,
   getHistory,
+  getRealizedHistory,
+  type RealizedPoint,
 } from "@/lib/api";
 import {
   formatCurrency,
@@ -20,12 +23,22 @@ import {
   pnlColor,
 } from "@/lib/format";
 
+type ChartMode = "basket" | "realized";
+
 /** Tab 1 — Portfolio (main). The showcase dashboard. */
 export function PortfolioPage() {
   const overview = useApi(getPortfolio);
   const metrics = useApi(getMetrics);
   const exposure = useApi(getExposure);
   const history = useApi(getHistory);
+  const [chartMode, setChartMode] = useState<ChartMode>("basket");
+  const [realized, setRealized] = useState<RealizedPoint[] | null>(null);
+
+  useEffect(() => {
+    if (chartMode === "realized" && !realized) {
+      getRealizedHistory().then(setRealized);
+    }
+  }, [chartMode, realized]);
 
   return (
     <div>
@@ -81,18 +94,55 @@ export function PortfolioPage() {
       {/* Evolution chart + risk panel */}
       <div className="mb-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Card
-          title="Evolución vs. benchmark (SPY)"
-          subtitle="Rendimiento acumulado"
+          title={chartMode === "basket" ? "Evolución vs. benchmark (SPY)" : "P&L realizado"}
+          subtitle={chartMode === "basket" ? "Basket hipotético (tenencias actuales)" : "Respeta fecha de entrada de cada posición"}
           className="lg:col-span-2"
+          action={
+            <div className="flex gap-1">
+              {(["basket", "realized"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setChartMode(m)}
+                  className={`rounded-control border px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
+                    chartMode === m
+                      ? "border-accent bg-accent/10 text-primary"
+                      : "border-separator text-secondary hover:bg-separator/40"
+                  }`}
+                >
+                  {m === "basket" ? "Basket" : "Realizado"}
+                </button>
+              ))}
+            </div>
+          }
         >
-          {history.loading && <Spinner />}
-          {history.error && <ErrorState message={history.error} />}
-          {history.data &&
-            (history.data.length > 0 ? (
-              <LineChartCard data={history.data} />
-            ) : (
-              <p className="py-10 text-sm text-secondary">Sin historial</p>
-            ))}
+          {chartMode === "basket" && (
+            <>
+              {history.loading && <Spinner />}
+              {history.error && <ErrorState message={history.error} />}
+              {history.data &&
+                (history.data.length > 0 ? (
+                  <LineChartCard data={history.data} />
+                ) : (
+                  <p className="py-10 text-sm text-secondary">Sin historial</p>
+                ))}
+            </>
+          )}
+          {chartMode === "realized" && (
+            <>
+              {!realized && <Spinner />}
+              {realized && realized.length > 0 ? (
+                <LineChartCard
+                  data={realized.map((p) => ({
+                    date: p.date,
+                    portfolio: p.realized_pnl,
+                    benchmark: null,
+                  }))}
+                />
+              ) : realized ? (
+                <p className="py-10 text-sm text-secondary">Sin datos de P&L realizado</p>
+              ) : null}
+            </>
+          )}
         </Card>
 
         <Card title="Riesgo" subtitle="Métricas de la cartera">

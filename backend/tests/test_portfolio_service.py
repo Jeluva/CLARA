@@ -69,4 +69,17 @@ def test_history_aligns_portfolio_and_benchmark(db: Session) -> None:
     assert history[0]["benchmark"] == pytest.approx(0.0, abs=1e-9)
 
 
+def test_realized_history_respects_opened_at(db: Session) -> None:
+    seed_database(db)
+    realized = svc.get_realized_history(db)
+    assert len(realized) > 0
+    # Should be shorter than full history since positions open at different times
+    full = svc.get_history(db)
+    assert len(realized) <= len(full)
+    # Each point has a realized_pnl
+    for p in realized:
+        assert "date" in p
+        assert "realized_pnl" in p
+
+
 import pytest  # noqa: E402  (kept at bottom; used by approx above)

@@ -50,3 +50,9 @@ def exposure(db: Session = Depends(get_db)) -> ExposureOut:
 def history(db: Session = Depends(get_db)) -> list[HistoryPoint]:
     """Cumulative-return series of the portfolio vs the benchmark."""
     return [HistoryPoint(**point) for point in svc.get_history(db)]
+
+
+@router.get("/realized-history")
+def realized_history(db: Session = Depends(get_db)) -> list[dict]:
+    """P&L realizado respetando opened_at de cada posición (ADR 0003 V2)."""
+    return svc.get_realized_history(db)

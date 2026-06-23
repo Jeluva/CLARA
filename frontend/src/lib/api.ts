@@ -120,6 +120,14 @@ export const getPortfolio = () => apiGet<PortfolioOverview>("/portfolio");
 export const getMetrics = () => apiGet<RiskMetrics>("/portfolio/metrics");
 export const getExposure = () => apiGet<Exposure>("/portfolio/exposure");
 export const getHistory = () => apiGet<HistoryPoint[]>("/portfolio/history");
+
+export interface RealizedPoint {
+  date: string;
+  realized_pnl: number;
+}
+
+export const getRealizedHistory = () =>
+  apiGet<RealizedPoint[]>("/portfolio/realized-history");
 export const getCorrelation = () =>
   apiGet<Correlation>("/research/correlation");
 
