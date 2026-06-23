@@ -143,7 +143,7 @@ _INGESTORS = {
 def run_ingestion(
     source: str = "prices", db: Session = Depends(get_db)
 ) -> IngestionResult:
-    """Force-run a source's (mock) ingestion now: prices, news or transcripts."""
+    """Force-run a source's ingestion now: prices, news or transcripts."""
     entry = _INGESTORS.get(source)
     if entry is None:
         raise HTTPException(
