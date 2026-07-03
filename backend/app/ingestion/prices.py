@@ -93,7 +93,7 @@ def _run_real_price_ingestion(db: Session) -> PromotionResult:
                     BronzeRecord.source_table == "prices",
                     BronzeRecord.dedupe_key == dedupe,
                 )
-            ).scalar_one_or_none()
+            ).first()
             if already is not None:
                 continue
             db.add(BronzeRecord(
