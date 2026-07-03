@@ -113,6 +113,19 @@ class IngestionResult(BaseModel):
     message: str
 
 
+class ChannelCreate(BaseModel):
+    url_or_handle: str = Field(min_length=1, max_length=256)
+
+
+class ChannelOut(BaseModel):
+    id: int
+    channel_id: str
+    handle: str
+    display_name: str
+    active: bool
+    added_at: datetime
+
+
 # --- News & sentiment --------------------------------------------------------
 
 

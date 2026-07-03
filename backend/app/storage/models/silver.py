@@ -124,3 +124,18 @@ class Transcript(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     sentiment: Mapped[float] = mapped_column(Float, default=0.0)
     published_at: Mapped[datetime] = mapped_column(DateTime)
+
+
+class YoutubeChannel(Base):
+    """A YouTube channel followed for transcript ingestion. `channel_id` is
+    the natural key (canonical YouTube channel ID, resolved from the handle
+    the user typed in)."""
+
+    __tablename__ = "youtube_channels"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    handle: Mapped[str] = mapped_column(String(128), default="")
+    display_name: Mapped[str] = mapped_column(String(256), default="")
+    active: Mapped[bool] = mapped_column(default=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

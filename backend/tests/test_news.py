@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from sqlalchemy.orm import Session
 
 from app.ingestion.news import run_mock_news_ingestion
 from app.ingestion.sentiment import label, score, _is_spanish
-from app.ingestion.transcripts import run_mock_transcript_ingestion
+from app.ingestion.transcripts import (
+    run_channel_transcript_ingestion,
+    run_mock_transcript_ingestion,
+    run_transcript_ingestion,
+)
 from app.services import news_service as svc
+from app.services import crud_service as crud
 from app.storage.models.silver import News
 from app.storage.seed import seed_database
 
@@ -89,3 +96,59 @@ def test_transcript_ingestion(db: Session) -> None:
     transcripts = svc.list_transcripts(db)
     assert len(transcripts) == result.promoted
     assert all("sentiment_label" in t for t in transcripts)
+
+
+def test_channel_transcript_ingestion(db: Session) -> None:
+    with patch(
+        "app.ingestion.youtube.resolve_channel",
+        return_value={"channel_id": "UC1", "handle": "@t", "display_name": "T Channel"},
+    ):
+        crud.create_channel(db, url_or_handle="@t")
+
+    with (
+        patch(
+            "app.ingestion.transcripts.youtube.list_latest_videos",
+            return_value=[{"video_id": "vid1", "title": "Market update", "upload_date": "20260701"}],
+        ),
+        patch(
+            "app.ingestion.transcripts.youtube.fetch_transcript",
+            return_value="Stocks rallied today on strong earnings.",
+        ),
+    ):
+        result = run_channel_transcript_ingestion(db)
+
+    assert result.promoted == 1
+    transcripts = svc.list_transcripts(db)
+    assert len(transcripts) == 1
+    assert transcripts[0]["source_channel"] == "T Channel"
+
+
+def test_channel_transcript_ingestion_skips_missing_transcript(db: Session) -> None:
+    with patch(
+        "app.ingestion.youtube.resolve_channel",
+        return_value={"channel_id": "UC1", "handle": "@t", "display_name": "T Channel"},
+    ):
+        crud.create_channel(db, url_or_handle="@t")
+
+    with (
+        patch(
+            "app.ingestion.transcripts.youtube.list_latest_videos",
+            return_value=[{"video_id": "vid1", "title": "No captions", "upload_date": None}],
+        ),
+        patch("app.ingestion.transcripts.youtube.fetch_transcript", return_value=None),
+    ):
+        result = run_channel_transcript_ingestion(db)
+
+    assert result.promoted == 0
+    assert svc.list_transcripts(db) == []
+
+
+def test_run_transcript_ingestion_falls_back_to_mock_without_channels(db: Session) -> None:
+    seed_database(db)
+    with patch("app.config.settings.use_mock_sources", False):
+        result = run_transcript_ingestion(db)
+    assert result.promoted > 0
+    # Mock fixture videos, not a real channel scrape.
+    assert svc.list_transcripts(db)[0]["source_channel"] in {
+        "Mercado en Foco", "Wall Street AR", "Inversor Global", "Renta Fija Hoy",
+    }

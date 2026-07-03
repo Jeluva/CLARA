@@ -7,13 +7,17 @@ import {
   ApiError,
   type Asset,
   type PositionFull,
+  type YoutubeChannel,
   getAssets,
   getPositions,
+  getChannels,
   createAsset,
   createPosition,
   createTransaction,
+  createChannel,
   deleteAsset,
   deletePosition,
+  deleteChannel,
   runIngestion,
 } from "@/lib/api";
 import { formatCurrency, formatNumber } from "@/lib/format";
@@ -25,6 +29,7 @@ const ASSET_CLASSES = ["cedear", "equity", "etf", "bond", "fx", "crypto"];
 export function DataEntryPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [positions, setPositions] = useState<PositionFull[]>([]);
+  const [channels, setChannels] = useState<YoutubeChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -32,9 +37,10 @@ export function DataEntryPage() {
   async function reload() {
     setLoading(true);
     try {
-      const [a, p] = await Promise.all([getAssets(), getPositions()]);
+      const [a, p, c] = await Promise.all([getAssets(), getPositions(), getChannels()]);
       setAssets(a);
       setPositions(p);
+      setChannels(c);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar");
@@ -121,22 +127,36 @@ export function DataEntryPage() {
         />
       </div>
 
-      <Card title="Ingestión" subtitle="Forzar la ingesta de una fuente" className="mt-5">
-        <div className="flex flex-wrap items-center gap-3">
-          {([
-            { source: "prices", label: "Ingestar precios" },
-            { source: "news", label: "Ingestar noticias" },
-            { source: "transcripts", label: "Ingestar transcripciones" },
-          ] as const).map(({ source, label }) => (
-            <IngestionButton
-              key={source}
-              label={label}
-              source={source}
-              onResult={(msg, ok) => notify(ok ? "ok" : "error", msg)}
-            />
-          ))}
-        </div>
-      </Card>
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Card title="Ingestión" subtitle="Forzar la ingesta de una fuente">
+          <div className="flex flex-wrap items-center gap-3">
+            {([
+              { source: "prices", label: "Ingestar precios" },
+              { source: "news", label: "Ingestar noticias" },
+              { source: "transcripts", label: "Ingestar transcripciones" },
+            ] as const).map(({ source, label }) => (
+              <IngestionButton
+                key={source}
+                label={label}
+                source={source}
+                onResult={(msg, ok) => notify(ok ? "ok" : "error", msg)}
+              />
+            ))}
+          </div>
+        </Card>
+
+        <ChannelForm
+          onCreate={async (urlOrHandle) => {
+            try {
+              const c = await createChannel(urlOrHandle);
+              notify("ok", `Canal "${c.display_name}" agregado.`);
+              await reload();
+            } catch (e) {
+              notify("error", describe(e));
+            }
+          }}
+        />
+      </div>
 
       {loading ? (
         <Card className="mt-5">
@@ -180,6 +200,29 @@ export function DataEntryPage() {
                   try {
                     await deletePosition(p.id);
                     notify("ok", "Posición eliminada.");
+                    await reload();
+                  } catch (e) {
+                    notify("error", describe(e));
+                  }
+                },
+              }))}
+            />
+          </Card>
+
+          <Card
+            title="Canales de YouTube"
+            subtitle={`${channels.length} seguidos — fuente de las transcripciones`}
+          >
+            <ListTable
+              empty="Sin canales seguidos"
+              headers={["Canal", "Handle", "", ""]}
+              rows={channels.map((c) => ({
+                id: c.id,
+                cells: [c.display_name, c.handle, ""],
+                onDelete: async () => {
+                  try {
+                    await deleteChannel(c.id);
+                    notify("ok", `Canal ${c.display_name} eliminado.`);
                     await reload();
                   } catch (e) {
                     notify("error", describe(e));
@@ -456,6 +499,47 @@ function TransactionForm({
             {busy ? "Guardando…" : "Registrar"}
           </Button>
         </div>
+      </form>
+    </Card>
+  );
+}
+
+function ChannelForm({
+  onCreate,
+}: {
+  onCreate: (urlOrHandle: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!value.trim()) return;
+    setBusy(true);
+    await onCreate(value.trim());
+    setBusy(false);
+    setValue("");
+  }
+
+  return (
+    <Card
+      title="Seguir canal de YouTube"
+      subtitle="Se ingieren sus últimos videos como fuente para el chatbot"
+    >
+      <form onSubmit={submit} className="flex items-end gap-3">
+        <div className="flex-1">
+          <Field label="URL o @handle del canal">
+            <Input
+              required
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="@CNBCtelevision"
+            />
+          </Field>
+        </div>
+        <Button type="submit" disabled={busy}>
+          {busy ? "Agregando…" : "Seguir"}
+        </Button>
       </form>
     </Card>
   );

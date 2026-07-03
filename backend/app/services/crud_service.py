@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.storage.models.silver import Asset, Position, Transaction
+from app.storage.models.silver import Asset, Position, Transaction, YoutubeChannel
 
 
 class NotFoundError(Exception):
@@ -152,3 +152,45 @@ def create_transaction(
     db.commit()
     db.refresh(tx)
     return tx
+
+
+# --- YouTube channels ---------------------------------------------------------
+
+
+def list_channels(db: Session) -> list[YoutubeChannel]:
+    return list(
+        db.execute(select(YoutubeChannel).order_by(YoutubeChannel.added_at)).scalars().all()
+    )
+
+
+def create_channel(db: Session, *, url_or_handle: str) -> YoutubeChannel:
+    from app.ingestion.youtube import ChannelNotFoundError, resolve_channel
+
+    try:
+        resolved = resolve_channel(url_or_handle)
+    except ChannelNotFoundError as exc:
+        raise ConflictError(str(exc)) from exc
+
+    existing = db.execute(
+        select(YoutubeChannel).where(YoutubeChannel.channel_id == resolved["channel_id"])
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise ConflictError(f"Ya seguís el canal '{resolved['display_name']}'")
+
+    channel = YoutubeChannel(
+        channel_id=resolved["channel_id"],
+        handle=resolved["handle"],
+        display_name=resolved["display_name"],
+    )
+    db.add(channel)
+    db.commit()
+    db.refresh(channel)
+    return channel
+
+
+def delete_channel(db: Session, channel_id: int) -> None:
+    channel = db.get(YoutubeChannel, channel_id)
+    if channel is None:
+        raise NotFoundError(f"No existe el canal id={channel_id}")
+    db.delete(channel)
+    db.commit()

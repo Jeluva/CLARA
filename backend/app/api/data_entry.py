@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.api.schemas import (
     AssetCreate,
     AssetOut,
+    ChannelCreate,
+    ChannelOut,
     IngestionResult,
     PositionCreate,
     PositionOutFull,
@@ -15,7 +17,7 @@ from app.api.schemas import (
 )
 from app.ingestion.news import run_news_ingestion
 from app.ingestion.prices import run_price_ingestion
-from app.ingestion.transcripts import run_mock_transcript_ingestion
+from app.ingestion.transcripts import run_transcript_ingestion
 from app.services import asset_service
 from app.services import crud_service as crud
 from app.storage.database import get_db
@@ -135,7 +137,7 @@ def create_transaction(
 _INGESTORS = {
     "prices": (run_price_ingestion, "precios"),
     "news": (run_news_ingestion, "noticias"),
-    "transcripts": (run_mock_transcript_ingestion, "transcripciones"),
+    "transcripts": (run_transcript_ingestion, "transcripciones"),
 }
 
 
@@ -162,3 +164,29 @@ def run_ingestion(
             f"{result.quarantined} en cuarentena."
         ),
     )
+
+
+# --- YouTube channels ----------------------------------------------------------
+
+
+@router.get("/api/youtube/channels", response_model=list[ChannelOut])
+def list_channels(db: Session = Depends(get_db)) -> list[ChannelOut]:
+    return [ChannelOut(**c.__dict__) for c in crud.list_channels(db)]
+
+
+@router.post("/api/youtube/channels", response_model=ChannelOut, status_code=201)
+def create_channel(body: ChannelCreate, db: Session = Depends(get_db)) -> ChannelOut:
+    try:
+        channel = crud.create_channel(db, url_or_handle=body.url_or_handle)
+    except crud.ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return ChannelOut(**channel.__dict__)
+
+
+@router.delete("/api/youtube/channels/{channel_id}", status_code=204, response_class=Response)
+def delete_channel(channel_id: int, db: Session = Depends(get_db)) -> Response:
+    try:
+        crud.delete_channel(db, channel_id)
+    except crud.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=204)

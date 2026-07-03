@@ -15,7 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.ingestion.news import run_news_ingestion
 from app.ingestion.prices import run_price_ingestion
-from app.ingestion.transcripts import run_mock_transcript_ingestion
+from app.ingestion.transcripts import run_transcript_ingestion
 from app.storage.database import SessionLocal
 
 logger = logging.getLogger("clara.scheduler")
@@ -56,7 +56,7 @@ def build_scheduler() -> BackgroundScheduler:
     )
     # Transcripts: once a day (08:00 UTC).
     scheduler.add_job(
-        lambda: _run("transcripts", run_mock_transcript_ingestion),
+        lambda: _run("transcripts", run_transcript_ingestion),
         CronTrigger(hour=8, minute=0),
         id="ingest_transcripts",
         replace_existing=True,
