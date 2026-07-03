@@ -163,6 +163,12 @@ def promote_bronze(db: Session) -> PromotionResult:
         upserter(db, payload, context)
         record.status = "promoted"
         result.promoted += 1
+        # Sessions here run with autoflush=False, so the next iteration's
+        # "does this natural key already exist" check wouldn't otherwise see
+        # this upsert — flushing makes duplicates within the same batch
+        # (e.g. the same news URL returned for two different ticker queries)
+        # resolve as an update instead of a second insert.
+        db.flush()
 
     db.commit()
     return result

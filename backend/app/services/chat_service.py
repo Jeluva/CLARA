@@ -24,7 +24,7 @@ from app.config import settings
 from app.services import news_service
 from app.services.market_data import price_series_by_ticker
 from app.services.portfolio_service import _position_inputs
-from app.storage.models.silver import Asset
+from app.storage.models.silver import Asset, Transcript
 
 SYSTEM_PROMPT = """\
 Sos un analista de inversiones senior dentro de CLARA, una mesa de análisis de \
@@ -104,7 +104,29 @@ def _build_asset_context(db: Session, ticker: str) -> str:
     else:
         lines.append("Sin noticias recientes para este activo.")
 
+    transcripts = _relevant_transcripts(db, ticker, asset.name)
+    if transcripts:
+        lines.append("Transcripciones de YouTube relevantes:")
+        for t in transcripts:
+            lines.append(
+                f"  - [{t.sentiment:+.2f}] \"{t.title}\" ({t.source_channel}, "
+                f"{t.published_at.date().isoformat()}): {t.summary}"
+            )
+
     return "\n".join(lines)
+
+
+def _relevant_transcripts(db: Session, ticker: str, asset_name: str) -> list[Transcript]:
+    """Recent transcripts whose title/text mention this ticker or asset name."""
+    needles = {ticker.lower(), asset_name.lower()}
+    rows = db.execute(
+        select(Transcript).order_by(Transcript.published_at.desc()).limit(50)
+    ).scalars().all()
+    matches = [
+        t for t in rows
+        if any(n in (t.title + " " + t.transcript).lower() for n in needles)
+    ]
+    return matches[:3]
 
 
 def _reply_openai_compat(
@@ -130,11 +152,15 @@ def _reply_openai_compat(
         text = response.choices[0].message.content or ""
         return {"reply": text.strip(), "configured": True}
     except APIStatusError as exc:
-        if exc.status_code in (429, 402):
+        # Any provider-side failure (quota, rate-limit, invalid/expired key,
+        # auth, etc.) falls through to the next provider in the chain rather
+        # than surfacing the raw error to the user.
+        if exc.status_code in (401, 402, 403, 429):
             return None
         return {"reply": f"Error de {provider}: {exc.message}", "configured": True, "error": True}
-    except Exception as exc:
-        return {"reply": f"Error de {provider}: {exc}", "configured": True, "error": True}
+    except Exception:
+        # Network errors, timeouts, etc. — also fall through.
+        return None
 
 
 def _reply_groq(context: str, messages: list[ChatMessage]) -> dict | None:
@@ -157,7 +183,7 @@ def _reply_qwen(context: str, messages: list[ChatMessage]) -> dict | None:
     )
 
 
-def _reply_anthropic(context: str, messages: list[ChatMessage]) -> dict:
+def _reply_anthropic(context: str, messages: list[ChatMessage]) -> dict | None:
     import anthropic
     model = settings.chat_model or "claude-haiku-4-5-20251001"
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -171,8 +197,8 @@ def _reply_anthropic(context: str, messages: list[ChatMessage]) -> dict:
         )
         text = "".join(b.text for b in response.content if b.type == "text")
         return {"reply": text.strip(), "configured": True}
-    except anthropic.APIError as exc:
-        return {"reply": f"No se pudo contactar al modelo: {exc}", "configured": True, "error": True}
+    except anthropic.APIError:
+        return None  # fall back to static analysis
 
 
 def _reply_gemini(context: str, messages: list[ChatMessage]) -> dict | None:
@@ -200,8 +226,11 @@ def _reply_gemini(context: str, messages: list[ChatMessage]) -> dict | None:
         return {"reply": response.text.strip(), "configured": True}
     except Exception as exc:
         msg = str(exc)
-        if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower():
-            return None  # signal: fall back to static
+        if any(
+            token in msg
+            for token in ("429", "401", "403", "RESOURCE_EXHAUSTED", "API_KEY_INVALID")
+        ) or "quota" in msg.lower():
+            return None  # signal: fall back to the next provider
         return {"reply": f"No se pudo contactar al modelo: {exc}", "configured": True, "error": True}
 
 
@@ -274,6 +303,14 @@ def _static_analysis(db: Session, ticker: str) -> str:
             lines.append(f"- [{icon}] {n.title} _{n.source}_")
         lines.append("")
 
+    transcripts = _relevant_transcripts(db, ticker, asset.name)
+    if transcripts:
+        lines.append("### Transcripciones de YouTube relevantes")
+        for t in transcripts:
+            icon = "+" if t.sentiment >= 0.05 else "-" if t.sentiment <= -0.05 else "·"
+            lines.append(f"- [{icon}] \"{t.title}\" _{t.source_channel}_: {t.summary}")
+        lines.append("")
+
     lines.append("---")
     lines.append("_Análisis estático basado en datos del portfolio. Configurá una API key de LLM en `.env` para respuestas conversacionales._")
     return "\n".join(lines)
@@ -300,7 +337,9 @@ def fundamental_analysis(
             return result
 
     if settings.anthropic_api_key:
-        return _reply_anthropic(context, messages)
+        result = _reply_anthropic(context, messages)
+        if result is not None:
+            return result
 
     return {
         "reply": _static_analysis(db, ticker),

@@ -77,7 +77,7 @@ def _run_real_news_ingestion(db: Session) -> PromotionResult:
                     BronzeRecord.source_table == "news",
                     BronzeRecord.dedupe_key == dedupe,
                 )
-            ).scalar_one_or_none()
+            ).first()
             if already is not None:
                 continue
 
@@ -95,6 +95,11 @@ def _run_real_news_ingestion(db: Session) -> PromotionResult:
                     "published_at": pub_dt.date().isoformat(),
                 }),
             ))
+            # The same article can come back for two different ticker
+            # queries (e.g. a MSFT-vs-NVDA piece); flush so the dedupe
+            # check above sees it on the next iteration instead of
+            # inserting it twice.
+            db.flush()
 
     db.commit()
     return promote_bronze(db)
