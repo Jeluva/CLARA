@@ -184,6 +184,20 @@ export const deletePosition = (id: number) => apiDelete(`/positions/${id}`);
 export const runIngestion = (source: string) =>
   apiPost<IngestionResult>(`/ingestion/run?source=${source}`, {});
 
+export interface YoutubeChannel {
+  id: number;
+  channel_id: string;
+  handle: string;
+  display_name: string;
+  active: boolean;
+  added_at: string;
+}
+
+export const getChannels = () => apiGet<YoutubeChannel[]>("/youtube/channels");
+export const createChannel = (url_or_handle: string) =>
+  apiPost<YoutubeChannel>("/youtube/channels", { url_or_handle });
+export const deleteChannel = (id: number) => apiDelete(`/youtube/channels/${id}`);
+
 export interface TransactionCreate {
   ticker: string;
   type: "buy" | "sell";

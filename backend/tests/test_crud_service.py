@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -84,3 +86,54 @@ def test_delete_asset_cascades_to_prices(db: Session) -> None:
 def test_delete_missing_asset_raises(db: Session) -> None:
     with pytest.raises(crud.NotFoundError):
         crud.delete_asset(db, 999)
+
+
+# --- YouTube channels ----------------------------------------------------------
+
+
+def _mock_resolved(channel_id="UC123", handle="@testchan", display_name="Test Channel"):
+    return {"channel_id": channel_id, "handle": handle, "display_name": display_name}
+
+
+def test_create_and_list_channel(db: Session) -> None:
+    with patch(
+        "app.ingestion.youtube.resolve_channel", return_value=_mock_resolved()
+    ):
+        channel = crud.create_channel(db, url_or_handle="@testchan")
+    assert channel.channel_id == "UC123"
+    assert channel.active is True
+    assert [c.channel_id for c in crud.list_channels(db)] == ["UC123"]
+
+
+def test_create_duplicate_channel_conflicts(db: Session) -> None:
+    with patch(
+        "app.ingestion.youtube.resolve_channel", return_value=_mock_resolved()
+    ):
+        crud.create_channel(db, url_or_handle="@testchan")
+        with pytest.raises(crud.ConflictError):
+            crud.create_channel(db, url_or_handle="https://youtube.com/@testchan")
+
+
+def test_create_channel_not_found_raises_conflict(db: Session) -> None:
+    from app.ingestion.youtube import ChannelNotFoundError
+
+    with patch(
+        "app.ingestion.youtube.resolve_channel",
+        side_effect=ChannelNotFoundError("nope"),
+    ):
+        with pytest.raises(crud.ConflictError):
+            crud.create_channel(db, url_or_handle="@doesnotexist")
+
+
+def test_delete_channel(db: Session) -> None:
+    with patch(
+        "app.ingestion.youtube.resolve_channel", return_value=_mock_resolved()
+    ):
+        channel = crud.create_channel(db, url_or_handle="@testchan")
+    crud.delete_channel(db, channel.id)
+    assert crud.list_channels(db) == []
+
+
+def test_delete_missing_channel_raises(db: Session) -> None:
+    with pytest.raises(crud.NotFoundError):
+        crud.delete_channel(db, 999)
