@@ -27,6 +27,7 @@ from app.analytics.portfolio import (
     portfolio_value_series,
 )
 from app.analytics.returns import daily_returns, total_return
+from app.services import fx_service
 from app.services.market_data import latest_prices, price_series_by_ticker
 from app.storage.models.silver import Asset, Position
 
@@ -85,12 +86,28 @@ def _held_positions(db: Session) -> list[tuple[Asset, float, float]]:
 
 
 def _position_inputs(db: Session) -> list[PositionInput]:
+    """Position inputs with prices normalized to USD.
+
+    `avg_cost`/`latest_price` and downstream market values are always USD, so
+    ARS-denominated holdings (GGAL, YPFD, sovereign bonds) aggregate correctly
+    against USD ones instead of inflating totals with raw peso figures.
+    `currency` keeps the asset's *native* currency for the exposure breakdown.
+    """
     prices = latest_prices(db)
+    held = _held_positions(db)
+    rate = (
+        fx_service.usd_ars_rate()
+        if any(asset.currency.upper() == "ARS" for asset, _, _ in held)
+        else None
+    )
     inputs: list[PositionInput] = []
-    for asset, qty, avg_cost in _held_positions(db):
+    for asset, qty, avg_cost in held:
         price = prices.get(asset.ticker)
         if price is None:
             continue  # no price -> can't value it; skip (see ADR/roadmap)
+        if asset.currency.upper() == "ARS" and rate:
+            price = price / rate
+            avg_cost = avg_cost / rate
         inputs.append(
             PositionInput(
                 ticker=asset.ticker,

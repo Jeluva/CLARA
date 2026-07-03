@@ -35,6 +35,17 @@ def test_overview_weights_sum_to_one(db: Session) -> None:
     assert len(overview.positions) == len(held)
 
 
+def test_ars_positions_normalized_to_usd(db: Session) -> None:
+    """GGAL/YPFD are ARS-denominated; their market value must convert to USD
+    (via the fixed 1000.0 test rate) rather than being added raw."""
+    seed_database(db)
+    overview = svc.get_portfolio_overview(db)
+    ggal = next(p for p in overview.positions if p.ticker == "GGAL")
+    assert ggal.currency == "ARS"
+    # Seeded GGAL avg_cost is 30.0 (native units); at a 1000.0 rate that's 0.03 USD.
+    assert ggal.avg_cost == pytest.approx(0.03, rel=1e-3)
+
+
 def test_risk_metrics_sane_ranges(db: Session) -> None:
     seed_database(db)
     m = svc.get_risk_metrics(db)
