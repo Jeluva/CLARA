@@ -1,9 +1,11 @@
 /**
- * Thin API client. Uses same-origin `/api/...` paths; Vite proxies them to
- * FastAPI in dev. Centralises error handling so pages don't repeat fetch logic.
+ * Thin API client. Centralises error handling so pages don't repeat fetch
+ * logic. Talks to same-origin `/api/...` by default (Vite proxies it to
+ * FastAPI in dev); set VITE_API_URL to point at a backend on another origin
+ * (e.g. when the frontend and backend are deployed separately).
  */
 
-const BASE = "/api";
+const BASE = `${import.meta.env.VITE_API_URL ?? ""}/api`;
 
 export class ApiError extends Error {
   constructor(

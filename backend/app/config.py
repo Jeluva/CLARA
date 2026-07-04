@@ -31,12 +31,14 @@ class Settings(BaseSettings):
     # Storage — swap to a Postgres URL in prod, schema is identical.
     database_url: str = _DEFAULT_DB
 
-    # Frontend dev/preview origins, for CORS (5180 dev, 4180 vite preview).
+    # Frontend origins, for CORS (5180 dev, 4180 vite preview, Vercel prod).
+    # Override via CORS_ORIGINS (JSON list) if the prod frontend URL changes.
     cors_origins: list[str] = [
         "http://localhost:5180",
         "http://127.0.0.1:5180",
         "http://localhost:4180",
         "http://127.0.0.1:4180",
+        "https://clara-jet.vercel.app",
     ]
 
     # External sources. Empty => the module falls back to documented mocks.
