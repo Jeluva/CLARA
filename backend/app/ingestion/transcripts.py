@@ -125,7 +125,11 @@ def run_channel_transcript_ingestion(db: Session) -> PromotionResult:
             if already is not None:
                 continue
 
-            transcript = youtube.fetch_transcript(video_id)
+            try:
+                transcript = youtube.fetch_transcript(video_id)
+            except youtube.ChannelFetchError as exc:
+                errors.append(str(exc))
+                continue
             if not transcript:
                 continue  # captions disabled/unavailable — nothing to ingest
 
@@ -151,8 +155,21 @@ def run_channel_transcript_ingestion(db: Session) -> PromotionResult:
             )
     db.commit()
     result = promote_bronze(db)
-    result.errors.extend(errors)
+    result.errors.extend(_dedupe_errors(errors))
     return result
+
+
+def _dedupe_errors(errors: list[str], limit: int = 5) -> list[str]:
+    """Collapse repeat failures (e.g. every video in a blocked channel
+    failing the same way) into a short, readable summary."""
+    seen: dict[str, int] = {}
+    for err in errors:
+        seen[err] = seen.get(err, 0) + 1
+    unique = list(seen)
+    shown = [f"{err} (x{seen[err]})" if seen[err] > 1 else err for err in unique[:limit]]
+    if len(unique) > limit:
+        shown.append(f"... y {len(unique) - limit} error(es) más")
+    return shown
 
 
 # ---------------------------------------------------------------------------
