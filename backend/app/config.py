@@ -45,6 +45,15 @@ class Settings(BaseSettings):
     news_api_key: str = ""
     youtube_api_key: str = ""
 
+    # Webshare residential proxy — routes yt-dlp / youtube-transcript-api
+    # traffic around YouTube's blanket block on cloud-provider IPs (Render,
+    # AWS, etc). Empty => requests go out direct (works locally, blocked in
+    # prod). Get credentials at webshare.io (their "Residential" plan is the
+    # one youtube-transcript-api's docs recommend; the free "Proxy Server"
+    # plan is datacenter IPs and gets blocked the same as Render's).
+    webshare_proxy_username: str = ""
+    webshare_proxy_password: str = ""
+
     # Groq — prioridad 1. Free tier: 14.400 req/día. Key: console.groq.com
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"

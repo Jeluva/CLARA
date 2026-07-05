@@ -2,8 +2,12 @@
 
 No API key required: channel listing goes through `yt-dlp` (flat extraction of
 the channel's /videos tab), and transcripts go through `youtube-transcript-api`
-(direct call to YouTube's caption endpoint). Both run locally, no Google Cloud
-key needed.
+(direct call to YouTube's caption endpoint). No Google Cloud key needed.
+
+YouTube blanket-blocks requests from cloud-provider IPs (Render, AWS, etc.),
+so in production both go through a Webshare residential proxy when
+WEBSHARE_PROXY_USERNAME/PASSWORD are set (see app.config); locally, with no
+proxy configured, requests go out direct.
 """
 
 from __future__ import annotations
@@ -11,6 +15,38 @@ from __future__ import annotations
 import logging
 
 logger = logging.getLogger("clara.youtube")
+
+
+def _proxy_url() -> str | None:
+    """Webshare residential proxy URL, or None if not configured.
+
+    YouTube blanket-blocks cloud-provider IPs (Render, AWS, etc.), so in
+    production this routes yt-dlp/youtube-transcript-api traffic through a
+    residential exit instead of going out direct.
+    """
+    from app.config import settings
+
+    if not settings.webshare_proxy_username or not settings.webshare_proxy_password:
+        return None
+    return (
+        f"http://{settings.webshare_proxy_username}:{settings.webshare_proxy_password}"
+        "@p.webshare.io:80"
+    )
+
+
+def _transcript_api():
+    from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api.proxies import WebshareProxyConfig
+    from app.config import settings
+
+    if settings.webshare_proxy_username and settings.webshare_proxy_password:
+        return YouTubeTranscriptApi(
+            proxy_config=WebshareProxyConfig(
+                proxy_username=settings.webshare_proxy_username,
+                proxy_password=settings.webshare_proxy_password,
+            )
+        )
+    return YouTubeTranscriptApi()
 
 
 class ChannelNotFoundError(Exception):
@@ -35,6 +71,8 @@ def resolve_channel(url_or_handle: str) -> dict:
     import yt_dlp
 
     opts = {"extract_flat": True, "playlist_items": "1", "quiet": True, "skip_download": True}
+    if proxy := _proxy_url():
+        opts["proxy"] = proxy
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(_channel_videos_url(url_or_handle), download=False)
@@ -57,12 +95,15 @@ def list_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
     import yt_dlp
 
     channel_url = f"https://www.youtube.com/channel/{channel_id}/videos"
+    proxy = _proxy_url()
     flat_opts = {
         "extract_flat": True,
         "playlist_items": f"1-{limit}",
         "quiet": True,
         "skip_download": True,
     }
+    if proxy:
+        flat_opts["proxy"] = proxy
     try:
         with yt_dlp.YoutubeDL(flat_opts) as ydl:
             info = ydl.extract_info(channel_url, download=False)
@@ -73,6 +114,8 @@ def list_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
     entries = info.get("entries") or []
     videos: list[dict] = []
     meta_opts = {"quiet": True, "skip_download": True}
+    if proxy:
+        meta_opts["proxy"] = proxy
     with yt_dlp.YoutubeDL(meta_opts) as ydl:
         for entry in entries[:limit]:
             video_id = entry.get("id")
@@ -104,7 +147,6 @@ def fetch_transcript(video_id: str) -> str | None:
 
     Returns None if no transcript is available (disabled captions, etc.).
     """
-    from youtube_transcript_api import YouTubeTranscriptApi
     from youtube_transcript_api._errors import (
         NoTranscriptFound,
         TranscriptsDisabled,
@@ -112,7 +154,7 @@ def fetch_transcript(video_id: str) -> str | None:
     )
 
     try:
-        api = YouTubeTranscriptApi()
+        api = _transcript_api()
         transcript_list = api.list(video_id)
         try:
             transcript = transcript_list.find_transcript(["es", "es-419", "en"])
