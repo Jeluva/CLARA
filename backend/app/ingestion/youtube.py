@@ -17,6 +17,10 @@ class ChannelNotFoundError(Exception):
     """The given URL/handle does not resolve to a YouTube channel."""
 
 
+class ChannelFetchError(Exception):
+    """yt-dlp failed to list a channel's videos (blocked, rate-limited, etc.)."""
+
+
 def _channel_videos_url(url_or_handle: str) -> str:
     text = url_or_handle.strip()
     if text.startswith("http://") or text.startswith("https://"):
@@ -64,7 +68,7 @@ def list_latest_videos(channel_id: str, limit: int = 5) -> list[dict]:
             info = ydl.extract_info(channel_url, download=False)
     except Exception as exc:
         logger.warning("failed to list videos for channel %s: %s", channel_id, exc)
-        return []
+        raise ChannelFetchError(f"canal {channel_id}: {exc}") from exc
 
     entries = info.get("entries") or []
     videos: list[dict] = []
