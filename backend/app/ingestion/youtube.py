@@ -125,4 +125,4 @@ def fetch_transcript(video_id: str) -> str | None:
         return None
     except Exception as exc:
         logger.warning("transcript fetch failed for %s: %s", video_id, exc)
-        return None
+        raise ChannelFetchError(f"video {video_id}: {exc}") from exc
