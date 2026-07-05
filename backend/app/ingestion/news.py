@@ -10,6 +10,7 @@ Mock mode: static fixture headlines scored by real VADER (original behaviour).
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
@@ -23,6 +24,37 @@ from app.storage.models.bronze import BronzeRecord
 from app.storage.models.silver import Asset
 
 _NEWSAPI_URL = "https://newsapi.org/v2/everything"
+
+# Legal-entity suffixes that don't help match a company's name in headlines.
+_NAME_SUFFIXES = re.compile(
+    r"\b(inc|corp|corporation|co|ltd|plc|s\.a\.?|sa|group|holdings?)\.?$",
+    re.IGNORECASE,
+)
+
+
+_FINANCE_CONTEXT = re.compile(
+    r"\b(stock|shares?|earnings|revenue|price|market|trading|dividend|"
+    r"quarter(ly)?|guidance|ipo|buyback|nasdaq|nyse|bond|investors?|"
+    r"analysts?|ceo)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_relevant(ticker: str, name: str, title: str, summary: str) -> bool:
+    """Guard against NewsAPI matches that only mention the ticker in passing
+    (e.g. short tickers like "KO" or "AL30" colliding with unrelated text).
+
+    The company's core name settles it on its own. A bare ticker match is
+    ambiguous for short/common tickers, so it also needs some finance-y
+    word nearby before we trust it's about the company.
+    """
+    text = f"{title} {summary}"
+    core_name = _NAME_SUFFIXES.sub("", name).strip()
+    if core_name and re.search(rf"\b{re.escape(core_name)}\b", text, re.IGNORECASE):
+        return True
+    if re.search(rf"\b{re.escape(ticker)}\b", text, re.IGNORECASE):
+        return bool(_FINANCE_CONTEXT.search(text))
+    return False
 
 
 def _today() -> date:
@@ -42,7 +74,7 @@ def _run_real_news_ingestion(db: Session) -> PromotionResult:
             resp = httpx.get(
                 _NEWSAPI_URL,
                 params={
-                    "q": ticker,
+                    "qInTitle": ticker,
                     "apiKey": settings.news_api_key,
                     "language": "en",
                     "pageSize": 5,
@@ -61,6 +93,8 @@ def _run_real_news_ingestion(db: Session) -> PromotionResult:
                 continue
             title = art.get("title") or ""
             summary = art.get("description") or ""
+            if not _is_relevant(ticker, asset.name, title, summary):
+                continue
             source = (art.get("source") or {}).get("name", "NewsAPI")
             pub_str = art.get("publishedAt") or ""
 

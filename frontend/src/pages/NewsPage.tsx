@@ -172,7 +172,14 @@ export function NewsPage() {
                       {n.source} · {n.published_at}
                     </span>
                   </div>
-                  <p className="text-sm font-medium text-primary">{n.title}</p>
+                  <a
+                    href={n.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-primary hover:underline"
+                  >
+                    {n.title}
+                  </a>
                   <p className="mt-0.5 text-sm text-secondary">{n.summary}</p>
                 </li>
               ))}
