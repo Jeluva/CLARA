@@ -27,6 +27,11 @@ class PromotionResult:
     promoted: int = 0
     quarantined: int = 0
     skipped: int = 0
+    errors: list[str] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.errors is None:
+            self.errors = []
 
 
 def _build_context(db: Session) -> dict[str, Any]:

@@ -105,8 +105,15 @@ def run_channel_transcript_ingestion(db: Session) -> PromotionResult:
         select(YoutubeChannel).where(YoutubeChannel.active.is_(True))
     ).scalars().all()
 
+    errors: list[str] = []
     for channel in channels:
-        videos = youtube.list_latest_videos(channel.channel_id, limit=_VIDEOS_PER_CHANNEL)
+        try:
+            videos = youtube.list_latest_videos(
+                channel.channel_id, limit=_VIDEOS_PER_CHANNEL
+            )
+        except youtube.ChannelFetchError as exc:
+            errors.append(f"{channel.display_name or channel.handle}: {exc}")
+            continue
         for video in videos:
             video_id = video["video_id"]
             already = db.execute(
@@ -143,7 +150,9 @@ def run_channel_transcript_ingestion(db: Session) -> PromotionResult:
                 )
             )
     db.commit()
-    return promote_bronze(db)
+    result = promote_bronze(db)
+    result.errors.extend(errors)
+    return result
 
 
 # ---------------------------------------------------------------------------

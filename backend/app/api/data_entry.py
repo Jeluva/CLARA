@@ -155,14 +155,17 @@ def run_ingestion(
         )
     runner, noun = entry
     result = runner(db)
+    message = (
+        f"Ingestión '{source}': {result.promoted} {noun} promovidas, "
+        f"{result.quarantined} en cuarentena."
+    )
+    if result.errors:
+        message += " Errores: " + "; ".join(result.errors)
     return IngestionResult(
         source=source,
         promoted=result.promoted,
         quarantined=result.quarantined,
-        message=(
-            f"Ingestión '{source}': {result.promoted} {noun} promovidas, "
-            f"{result.quarantined} en cuarentena."
-        ),
+        message=message,
     )
 
 
