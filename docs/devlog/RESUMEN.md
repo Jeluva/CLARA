@@ -38,7 +38,12 @@ y un chatbot IA multi-provider:
 - **Noticias:** NewsAPI (requiere key). Fallback a fixtures con sentimiento VADER real.
 - **Macro:** yfinance (índices, US 10Y) + dolarapi.com (dólar). Riesgo país y
   BADLAR estáticos.
-- **Transcripciones:** mock determinístico (youtube-transcript-api listo).
+- **Transcripciones:** yt-dlp + youtube-transcript-api reales contra los
+  canales seguidos, con mock de fallback. En prod, YouTube bloquea las IPs
+  de datacenter de Render — workaround gratis vía
+  `POST /api/transcripts/ingest-external` + `scripts/fetch_transcripts_local.py`
+  (corrido desde una IP residencial), o pago vía proxy Webshare
+  (`WEBSHARE_PROXY_USERNAME/PASSWORD`). Ver fase-12.
 
 Todas las fuentes siguen `fetch → bronze → validar → promover`. El scheduler
 (APScheduler) tiene los jobs registrados con su cron; apagado por defecto
@@ -63,8 +68,10 @@ Todas las fuentes siguen `fetch → bronze → validar → promover`. El schedul
 
 ## Pendiente opcional
 
-- Transcripciones reales con youtube-transcript-api (bloqueado por bug en la lib).
 - Capturas finales en `docs/screenshots/` para el README.
+- Si se quiere automatizar transcripciones sin intervención manual: contratar
+  el plan Residential de Webshare (el gratuito de datacenter no sirve, ya
+  probado) y cargar las credenciales en Render.
 
 ## Cómo quedó para revisar
 
