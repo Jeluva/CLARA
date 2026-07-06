@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
@@ -14,10 +14,15 @@ from app.api.schemas import (
     PositionCreate,
     PositionOutFull,
     TransactionCreate,
+    TranscriptIngestItem,
 )
+from app.config import settings
 from app.ingestion.news import run_news_ingestion
 from app.ingestion.prices import run_price_ingestion
-from app.ingestion.transcripts import run_transcript_ingestion
+from app.ingestion.transcripts import (
+    ingest_external_transcripts,
+    run_transcript_ingestion,
+)
 from app.services import asset_service
 from app.services import crud_service as crud
 from app.storage.database import get_db
@@ -163,6 +168,36 @@ def run_ingestion(
         message += " Errores: " + "; ".join(result.errors)
     return IngestionResult(
         source=source,
+        promoted=result.promoted,
+        quarantined=result.quarantined,
+        message=message,
+    )
+
+
+@router.post("/api/transcripts/ingest-external", response_model=IngestionResult)
+def ingest_external_transcripts_endpoint(
+    items: list[TranscriptIngestItem],
+    db: Session = Depends(get_db),
+    x_ingest_secret: str | None = Header(default=None),
+) -> IngestionResult:
+    """Accept transcripts scraped elsewhere (e.g. a local machine with a
+    residential IP) instead of fetching them ourselves — a free workaround
+    for YouTube blocking datacenter IPs like this server's."""
+    if not settings.ingest_secret:
+        raise HTTPException(
+            status_code=501,
+            detail="INGEST_SECRET no está configurado en el servidor.",
+        )
+    if x_ingest_secret != settings.ingest_secret:
+        raise HTTPException(status_code=401, detail="Secreto inválido.")
+
+    result = ingest_external_transcripts(db, [item.model_dump() for item in items])
+    message = (
+        f"Ingestión externa: {result.promoted} transcripciones promovidas, "
+        f"{result.quarantined} en cuarentena."
+    )
+    return IngestionResult(
+        source="transcripts-external",
         promoted=result.promoted,
         quarantined=result.quarantined,
         message=message,
