@@ -117,6 +117,14 @@ class ChannelCreate(BaseModel):
     url_or_handle: str = Field(min_length=1, max_length=256)
 
 
+class TranscriptIngestItem(BaseModel):
+    video_id: str = Field(min_length=1, max_length=32)
+    channel: str = Field(min_length=1, max_length=128)
+    title: str = Field(min_length=1, max_length=512)
+    transcript: str = Field(min_length=1)
+    published_at: str
+
+
 class ChannelOut(BaseModel):
     id: int
     channel_id: str

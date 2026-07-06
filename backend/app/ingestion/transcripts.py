@@ -100,6 +100,44 @@ def _parse_upload_date(raw: str | None) -> str:
         return _today().isoformat()
 
 
+def _add_transcript_record(
+    db: Session, *, video_id: str, channel: str, title: str,
+    transcript: str, published_at: str,
+) -> bool:
+    """Insert a bronze transcript record if `video_id` hasn't been seen yet.
+    Returns whether it was inserted (False = already present, skipped)."""
+    already = db.execute(
+        select(BronzeRecord).where(
+            BronzeRecord.source_table == "transcripts",
+            BronzeRecord.dedupe_key == video_id,
+        )
+    ).first()
+    if already is not None:
+        return False
+
+    summary = transcript[:400] + ("…" if len(transcript) > 400 else "")
+    db.add(
+        BronzeRecord(
+            source_table="transcripts",
+            source=channel,
+            dedupe_key=video_id,
+            payload=json.dumps(
+                {
+                    "video_id": video_id,
+                    "source_channel": channel,
+                    "title": title,
+                    "url": f"https://youtube.com/watch?v={video_id}",
+                    "transcript": transcript,
+                    "summary": summary,
+                    "sentiment": score(transcript),
+                    "published_at": published_at,
+                }
+            ),
+        )
+    )
+    return True
+
+
 def run_channel_transcript_ingestion(db: Session) -> PromotionResult:
     channels = db.execute(
         select(YoutubeChannel).where(YoutubeChannel.active.is_(True))
@@ -133,30 +171,40 @@ def run_channel_transcript_ingestion(db: Session) -> PromotionResult:
             if not transcript:
                 continue  # captions disabled/unavailable — nothing to ingest
 
-            summary = transcript[:400] + ("…" if len(transcript) > 400 else "")
-            db.add(
-                BronzeRecord(
-                    source_table="transcripts",
-                    source=channel.display_name or channel.handle,
-                    dedupe_key=video_id,
-                    payload=json.dumps(
-                        {
-                            "video_id": video_id,
-                            "source_channel": channel.display_name or channel.handle,
-                            "title": video["title"],
-                            "url": f"https://youtube.com/watch?v={video_id}",
-                            "transcript": transcript,
-                            "summary": summary,
-                            "sentiment": score(transcript),
-                            "published_at": _parse_upload_date(video.get("upload_date")),
-                        }
-                    ),
-                )
+            _add_transcript_record(
+                db,
+                video_id=video_id,
+                channel=channel.display_name or channel.handle,
+                title=video["title"],
+                transcript=transcript,
+                published_at=_parse_upload_date(video.get("upload_date")),
             )
     db.commit()
     result = promote_bronze(db)
     result.errors.extend(_dedupe_errors(errors))
     return result
+
+
+# ---------------------------------------------------------------------------
+# External ingestion: pre-scraped transcripts pushed from a trusted machine
+# ---------------------------------------------------------------------------
+
+
+def ingest_external_transcripts(db: Session, items: list[dict]) -> PromotionResult:
+    """Insert transcripts that were already scraped elsewhere (e.g. a local
+    script run from a residential IP YouTube doesn't block) instead of
+    fetching them ourselves. Same dedupe/promotion path as real ingestion."""
+    for item in items:
+        _add_transcript_record(
+            db,
+            video_id=item["video_id"],
+            channel=item["channel"],
+            title=item["title"],
+            transcript=item["transcript"],
+            published_at=item["published_at"],
+        )
+    db.commit()
+    return promote_bronze(db)
 
 
 def _dedupe_errors(errors: list[str], limit: int = 5) -> list[str]:

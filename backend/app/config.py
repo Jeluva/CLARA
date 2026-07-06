@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     webshare_proxy_username: str = ""
     webshare_proxy_password: str = ""
 
+    # Shared secret for POST /api/transcripts/ingest-external — lets a
+    # trusted machine (e.g. your own PC, with a residential IP YouTube
+    # doesn't block) push pre-scraped transcripts into prod without needing
+    # a paid proxy. Empty => the endpoint is disabled.
+    ingest_secret: str = ""
+
     # Groq — prioridad 1. Free tier: 14.400 req/día. Key: console.groq.com
     groq_api_key: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
