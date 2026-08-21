@@ -309,8 +309,14 @@ def get_correlation(db: Session) -> dict:
     inputs = _position_inputs(db)
     tickers = [p.ticker for p in inputs]
     series = price_series_by_ticker(db, tickers)
+    if not series:
+        return {"tickers": [], "matrix": []}
+    # Align on shared dates first: per-ticker histories differ in coverage.
+    aligned = pd.concat(
+        [s.rename(t) for t, s in series.items()], axis=1
+    ).dropna()
     returns = {
-        t: daily_returns(s.to_numpy(dtype=float)) for t, s in series.items()
+        t: daily_returns(aligned[t].to_numpy(dtype=float)) for t in aligned.columns
     }
     matrix = correlation_matrix(returns)
     if matrix.empty:
