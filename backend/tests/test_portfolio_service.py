@@ -7,6 +7,7 @@ wrong, benchmark-vs-itself stops being 1 and this breaks loudly.
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 from sqlalchemy.orm import Session
 
@@ -91,6 +92,29 @@ def test_realized_history_respects_opened_at(db: Session) -> None:
     for p in realized:
         assert "date" in p
         assert "realized_pnl" in p
+
+
+def test_correlation_aligns_mismatched_histories(
+    db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real ingested tickers can have different date coverage (holidays,
+    different listing dates). get_correlation must align them by date before
+    computing returns, instead of crashing on unequal-length arrays."""
+    seed_database(db)
+
+    dates_long = pd.date_range("2024-01-01", periods=10, freq="D")
+    dates_short = pd.date_range("2024-01-03", periods=6, freq="D")
+    fake_series = {
+        "AAA": pd.Series(range(1, 11), index=dates_long, name="AAA", dtype=float),
+        "BBB": pd.Series(range(1, 7), index=dates_short, name="BBB", dtype=float),
+    }
+    monkeypatch.setattr(
+        svc, "price_series_by_ticker", lambda _db, tickers=None: fake_series
+    )
+
+    result = svc.get_correlation(db)
+    assert result["tickers"] == ["AAA", "BBB"]
+    assert len(result["matrix"]) == 2
 
 
 import pytest  # noqa: E402  (kept at bottom; used by approx above)
