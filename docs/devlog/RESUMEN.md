@@ -68,7 +68,6 @@ Todas las fuentes siguen `fetch → bronze → validar → promover`. El schedul
 
 ## Pendiente opcional
 
-- Capturas finales en `docs/screenshots/` para el README.
 - Si se quiere automatizar transcripciones sin intervención manual: contratar
   el plan Residential de Webshare (el gratuito de datacenter no sirve, ya
   probado) y cargar las credenciales en Render.

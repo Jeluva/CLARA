@@ -5,12 +5,16 @@ no hace falta releer BRIEF.md/AUTORUN.md/RESUMEN.md para saber qué falta,
 alcanza con esto. Una tarea = un ciclo de loop. No arrancar la siguiente
 hasta commitear la anterior.
 
-- [ ] 1. **Capturas finales.** Levantar backend (`uvicorn app.main:app`) y
-      frontend (`npm run dev`), abrir cada pestaña con datos del seed y
-      guardar un PNG por pestaña en `docs/screenshots/`: `portfolio.png`,
-      `noticias.png`, `research.png`, `macro.png`, `ingreso.png`. Linkear
-      las 5 desde el README (sección "Capturas"). Criterio de aceptación:
-      los 5 PNG existen y el README los embebe con `![...]`.
+- [x] 1. **Capturas finales.** Hecho: los 5 PNG existen en
+      `docs/screenshots/` (portfolio, noticias, research, macro, ingreso) y
+      el README los embebe en la sección "Capturas". De paso, tomar las
+      capturas contra el seed real destapó un bug: `/research/correlation`
+      tiraba 500 porque `get_correlation` no alineaba por fecha los
+      historiales de precio de cada ticker antes de calcular retornos (los
+      arrays podían tener distinta longitud). Arreglado en
+      `portfolio_service.get_correlation` (alinea con
+      `pd.concat(...).dropna()` antes de `daily_returns`), con test de
+      regresión en `test_portfolio_service.py`.
 
 - [x] 2. **YouTube transcripts reales.** Hecho en fase-12: no era un bug de
       la lib, es YouTube bloqueando IPs de datacenter (confirmado en vivo
@@ -21,14 +25,13 @@ hasta commitear la anterior.
       residencial) o proxy Webshare Residential (pago,
       `WEBSHARE_PROXY_USERNAME/PASSWORD`). Ver `docs/devlog/fase-12.md`.
 
-- [ ] 3. **Barrido final de cierre.** Correr `pytest` (backend) y
-      `npm test` + `tsc --noEmit` (frontend) una sola vez cada uno al final
-      de la tarea (no repetir corridas completas por cambios chicos, correr
-      solo el archivo de test afectado mientras se itera). Grep de
-      `TODO|FIXME|console.log|print(` fuera de scripts de debug conocidos;
-      limpiar lo que aparezca. Confirmar que CI (GitHub Actions) sigue
-      verde. Commit final: "Cierre: CLARA v1.0". Criterio: suite en verde,
-      sin TODOs sueltos, commit hecho.
+- [x] 3. **Barrido final de cierre.** Hecho: 97 tests backend (pytest) +
+      16 frontend (vitest) en verde, `tsc --noEmit` sin errores. Grep de
+      `TODO|FIXME|console.log|print(` no encontró nada fuera de lo
+      esperado (`print(` solo en `seed_cli.py`, salida legítima de CLI).
+      CI (GitHub Actions) en verde en los últimos runs. Rama local estaba
+      2 commits detrás de origin (borrado de `BRIEF.md`/`AUTORUN.md`);
+      sincronizada con fast-forward antes de commitear.
 
 ## Reglas del ciclo (para no gastar tokens de más)
 

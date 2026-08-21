@@ -30,8 +30,22 @@ superficie y hace las cuentas que importan, con tests que prueban que están bie
 | **Macro** | ¿Cómo está el contexto (índices, dólar, riesgo país, tasas)? |
 | **Ingreso de datos** | ¿Cómo cargo y edito posiciones y fuentes? |
 
-> **Capturas:** ver `docs/screenshots/` (se agregan en la revisión) y la
-> bitácora narrativa por fase en `docs/devlog/`.
+> **Capturas:** ver `docs/screenshots/` y la bitácora narrativa por fase en
+> `docs/devlog/`.
+
+### Capturas
+
+| Portfolio | Noticias & Sentimiento |
+|---|---|
+| ![Portfolio](docs/screenshots/portfolio.png) | ![Noticias](docs/screenshots/noticias.png) |
+
+| Research | Macro |
+|---|---|
+| ![Research](docs/screenshots/research.png) | ![Macro](docs/screenshots/macro.png) |
+
+| Ingreso de datos |
+|---|
+| ![Ingreso de datos](docs/screenshots/ingreso.png) |
 
 ## La arquitectura (por qué está pensada, no improvisada)
 
