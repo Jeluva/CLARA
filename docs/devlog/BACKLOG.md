@@ -61,6 +61,43 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
       útil para bonos (yield to maturity, duración, cupón, rating); si se
       quiere cubrir bonos hace falta otra fuente de datos, esto quedó fuera
       de esta vuelta.
+
+      **Investigación de fuentes para renta fija argentina (2026-08-21,
+      navegado en vivo con Chrome — sin API no importa, scraping con
+      Playwright sirve igual que en el proyecto content-creator):**
+      - `data912.com` — API JSON gratis, sin login, viva. `/live/arg_bonds`
+        (soberanos + provinciales mezclados), `/live/arg_corp` (ONs),
+        `/live/arg_cedears`, `/live/mep`, `/live/ccl`. Solo precio/bid/ask/
+        volumen — **sin TIR ni duration**.
+      - `bonistas.com` — el mejor para **soberanos**: TIR, TEM, TNA,
+        duration modificada (MD), paridad, próximo cupón (dQ/dF/c$m), todo
+        en tablas HTML server-rendered (no hace falta JS pesado). Sin
+        login. No cubre ONs ni provinciales.
+      - `rava.com/herramientas/analisis-de-bonos` — mismo nivel de detalle
+        que bonistas para soberanos (precio, TIR, duration, paridad).
+        Rava además tiene `/cotizaciones/acciones-argentinas` con vista
+        tipo finviz (52 sem., sparkline 30 días) — candidato para el
+        ítem 3 (screener). Pese a la descripción de la página de bonos
+        ("soberanos y provinciales"), **no encontré tabla de provinciales
+        ni de ONs** en el sitio.
+      - `portfoliopersonal.com/Cotizaciones/Ons` (PPI) — **el mejor para
+        ONs**: 1074 obligaciones negociables listadas con TIR, precio,
+        volumen, sin login, HTML paginado (50/página), actualiza cada 15
+        min. Verificado en vivo (ver AES, Aeropuertos Arg. 2000, Banco
+        Comafi, Banco Macro, etc. con TIR reales).
+      - `puentenet.com/cotizaciones/bonos` — el único sitio con pestañas
+        explícitas separadas "Argentina - Soberanos / Provinciales /
+        Corporativos / Lebacs" en un solo lugar. Fuente: Bolsa de Comercio
+        de Buenos Aires, delay de 30 min. HTML paginado, sin login.
+        **Pendiente confirmar**: si la pestaña "Provinciales" trae TIR/
+        duration poblados o solo precio (quedó a mitad de verificar).
+      - **Pendiente de esta investigación**: confirmar la pestaña
+        Provinciales de Puente: buscar una fuente de rating crediticio
+        para ONs (FIX SCR, Moody's Local, S&P Argentina, o el registro de
+        CNV); decidir si conviene consolidar todo en Puente (un solo
+        scraper, 3 categorías) o combinar bonistas (soberanos, mejor
+        calidad de dato) + PPI (ONs) + alguna fuente de provinciales
+        aparte.
 - [ ] 2. **Modo "solo mirar" / watchlist.** Buscar y ver datos de un ticker
       sin tener que darlo de alta como posición primero (hoy Ingreso de
       datos exige activo + posición antes de ver nada).
