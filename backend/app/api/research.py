@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.api.schemas import CorrelationOut
+from app.api.schemas import CorrelationOut, FundamentalsOut
 from app.services import portfolio_service as svc
 from app.services import research_service
 from app.storage.database import get_db
@@ -17,6 +17,19 @@ router = APIRouter(prefix="/api/research", tags=["research"])
 def correlation(db: Session = Depends(get_db)) -> CorrelationOut:
     """Correlation matrix of daily returns across held assets."""
     return CorrelationOut(**svc.get_correlation(db))
+
+
+@router.get("/fundamentals/{ticker}", response_model=FundamentalsOut)
+def fundamentals(ticker: str, db: Session = Depends(get_db)) -> FundamentalsOut:
+    """Latest fundamentals snapshot (valuation, growth, margins) for a ticker."""
+    data = research_service.get_fundamentals(db, ticker)
+    if data is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Sin fundamentals para {ticker.upper()}. "
+            "Corré la ingestión de fundamentals primero.",
+        )
+    return FundamentalsOut(**data)
 
 
 @router.get("/indicators")

@@ -17,6 +17,7 @@ from app.api.schemas import (
     TranscriptIngestItem,
 )
 from app.config import settings
+from app.ingestion.fundamentals import run_fundamentals_ingestion
 from app.ingestion.news import run_news_ingestion
 from app.ingestion.prices import run_price_ingestion
 from app.ingestion.transcripts import (
@@ -143,6 +144,7 @@ _INGESTORS = {
     "prices": (run_price_ingestion, "precios"),
     "news": (run_news_ingestion, "noticias"),
     "transcripts": (run_transcript_ingestion, "transcripciones"),
+    "fundamentals": (run_fundamentals_ingestion, "fundamentals"),
 }
 
 

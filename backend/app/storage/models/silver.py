@@ -126,6 +126,45 @@ class Transcript(Base):
     published_at: Mapped[datetime] = mapped_column(DateTime)
 
 
+class Fundamentals(Base):
+    """Latest fundamentals snapshot for an asset. One row per asset — this is
+    a point-in-time view (current valuation), not a history; re-ingesting
+    overwrites it. `asset_id` is the natural key."""
+
+    __tablename__ = "fundamentals"
+    __table_args__ = (UniqueConstraint("asset_id", name="uq_fundamentals_asset"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+
+    market_cap: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pe_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    forward_pe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    pb_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ev_to_ebitda: Mapped[float | None] = mapped_column(Float, nullable=True)
+    peg_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    dividend_yield: Mapped[float | None] = mapped_column(Float, nullable=True)
+    payout_ratio: Mapped[float | None] = mapped_column(Float, nullable=True)
+    revenue_growth: Mapped[float | None] = mapped_column(Float, nullable=True)
+    earnings_growth: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gross_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+    operating_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+    profit_margin: Mapped[float | None] = mapped_column(Float, nullable=True)
+    roe: Mapped[float | None] = mapped_column(Float, nullable=True)
+    debt_to_equity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    analyst_target_mean: Mapped[float | None] = mapped_column(Float, nullable=True)
+    analyst_recommendation: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    next_earnings_date: Mapped[date_type | None] = mapped_column(nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="mock")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    asset: Mapped[Asset] = relationship()
+
+
 class YoutubeChannel(Base):
     """A YouTube channel followed for transcript ingestion. `channel_id` is
     the natural key (canonical YouTube channel ID, resolved from the handle

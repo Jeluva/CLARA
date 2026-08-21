@@ -304,6 +304,33 @@ export const compareAssets = (tickers: string[]) =>
   apiGet<AssetComparison[]>(`/research/compare?tickers=${tickers.join(",")}`);
 export const getMacro = () => apiGet<MacroCard[]>("/macro");
 
+export interface Fundamentals {
+  ticker: string;
+  source: string;
+  updated_at: string | null;
+  market_cap: number | null;
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  pb_ratio: number | null;
+  ev_to_ebitda: number | null;
+  peg_ratio: number | null;
+  dividend_yield: number | null;
+  payout_ratio: number | null;
+  revenue_growth: number | null;
+  earnings_growth: number | null;
+  gross_margin: number | null;
+  operating_margin: number | null;
+  profit_margin: number | null;
+  roe: number | null;
+  debt_to_equity: number | null;
+  analyst_target_mean: number | null;
+  analyst_recommendation: string | null;
+  next_earnings_date: string | null;
+}
+
+export const getFundamentals = (ticker: string) =>
+  apiGet<Fundamentals>(`/research/fundamentals/${ticker}`);
+
 // --- Asset detail + chatbot --------------------------------------------------
 
 export interface AssetPosition {

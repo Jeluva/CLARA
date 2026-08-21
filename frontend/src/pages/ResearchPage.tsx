@@ -8,11 +8,14 @@ import { useApi } from "@/hooks/useApi";
 import {
   getCorrelation,
   getIndicators,
+  getFundamentals,
   compareAssets,
+  ApiError,
   type Indicators,
   type AssetComparison,
+  type Fundamentals,
 } from "@/lib/api";
-import { pnlColor } from "@/lib/format";
+import { pnlColor, formatCurrency, formatPercent } from "@/lib/format";
 
 /** Tab 3 — Research: correlation heatmap + technical indicators. */
 export function ResearchPage() {
@@ -81,8 +84,121 @@ export function ResearchPage() {
         {indicators && <TechnicalChart points={indicators.points} />}
       </Card>
 
+      <FundamentalsPanel ticker={ticker} />
+
       <AssetComparator tickers={correlation.data?.tickers ?? []} />
     </div>
+  );
+}
+
+/** A single valuation/growth/margin stat, or "—" when the field is absent
+ * (common: bonds and ETFs don't have most equity fundamentals). */
+function Stat({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-secondary">{label}</p>
+      <p className="tabnum text-base font-medium text-primary">{value ?? "—"}</p>
+    </div>
+  );
+}
+
+function FundamentalsPanel({ ticker }: { ticker: string | null }) {
+  const [data, setData] = useState<Fundamentals | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    if (!ticker) return;
+    let active = true;
+    setLoading(true);
+    setMissing(false);
+    getFundamentals(ticker)
+      .then((d) => active && setData(d))
+      .catch((err) => {
+        if (!active) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setData(null);
+          setMissing(true);
+        }
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [ticker]);
+
+  return (
+    <Card
+      title="Fundamentals"
+      subtitle="Valuación, crecimiento y márgenes — ¿está caro o barato?"
+      className="mb-5"
+    >
+      {loading && <Spinner />}
+      {missing && !loading && (
+        <p className="py-4 text-sm text-secondary">
+          Sin datos de fundamentals para {ticker}. Corré "Ingestar
+          fundamentals" en Ingreso de datos.
+        </p>
+      )}
+      {data && !loading && (
+        <div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Stat
+              label="Market cap"
+              value={data.market_cap != null ? formatCurrency(data.market_cap, true) : null}
+            />
+            <Stat label="P/E" value={data.pe_ratio != null ? `${data.pe_ratio.toFixed(1)}x` : null} />
+            <Stat label="P/E fwd" value={data.forward_pe != null ? `${data.forward_pe.toFixed(1)}x` : null} />
+            <Stat label="P/B" value={data.pb_ratio != null ? `${data.pb_ratio.toFixed(1)}x` : null} />
+            <Stat label="EV/EBITDA" value={data.ev_to_ebitda != null ? `${data.ev_to_ebitda.toFixed(1)}x` : null} />
+            <Stat label="PEG" value={data.peg_ratio != null ? data.peg_ratio.toFixed(2) : null} />
+            <Stat
+              label="Dividend yield"
+              value={data.dividend_yield != null ? `${data.dividend_yield.toFixed(2)}%` : null}
+            />
+            <Stat
+              label="Payout ratio"
+              value={data.payout_ratio != null ? formatPercent(data.payout_ratio) : null}
+            />
+            <Stat
+              label="Crec. ingresos"
+              value={data.revenue_growth != null ? formatPercent(data.revenue_growth) : null}
+            />
+            <Stat
+              label="Crec. ganancias"
+              value={data.earnings_growth != null ? formatPercent(data.earnings_growth) : null}
+            />
+            <Stat
+              label="Margen bruto"
+              value={data.gross_margin != null ? formatPercent(data.gross_margin) : null}
+            />
+            <Stat
+              label="Margen operativo"
+              value={data.operating_margin != null ? formatPercent(data.operating_margin) : null}
+            />
+            <Stat
+              label="Margen neto"
+              value={data.profit_margin != null ? formatPercent(data.profit_margin) : null}
+            />
+            <Stat label="ROE" value={data.roe != null ? formatPercent(data.roe) : null} />
+            <Stat
+              label="Deuda/equity"
+              value={data.debt_to_equity != null ? `${data.debt_to_equity.toFixed(1)}%` : null}
+            />
+            <Stat
+              label="Target analistas"
+              value={data.analyst_target_mean != null ? formatCurrency(data.analyst_target_mean) : null}
+            />
+            <Stat label="Recomendación" value={data.analyst_recommendation ?? null} />
+            <Stat label="Próximo earnings" value={data.next_earnings_date} />
+          </div>
+          <p className="mt-4 text-xs text-secondary">
+            Fuente: {data.source} · actualizado{" "}
+            {data.updated_at ? new Date(data.updated_at).toLocaleString() : "—"}
+          </p>
+        </div>
+      )}
+    </Card>
   );
 }
 

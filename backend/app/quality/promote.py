@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.quality.checks import run_checks
 from app.storage.models.bronze import BronzeRecord
 from app.storage.models.quality import Quarantine
-from app.storage.models.silver import Asset, News, Price, Transcript
+from app.storage.models.silver import Asset, Fundamentals, News, Price, Transcript
 
 
 @dataclass
@@ -123,10 +123,42 @@ def _upsert_transcript(
             setattr(existing, key, value)
 
 
+_FUNDAMENTALS_FIELDS = (
+    "market_cap", "pe_ratio", "forward_pe", "pb_ratio", "ev_to_ebitda",
+    "peg_ratio", "dividend_yield", "payout_ratio", "revenue_growth",
+    "earnings_growth", "gross_margin", "operating_margin", "profit_margin",
+    "roe", "debt_to_equity", "analyst_target_mean", "analyst_recommendation",
+)
+
+
+def _upsert_fundamentals(
+    db: Session, payload: dict[str, Any], ctx: dict[str, Any]
+) -> None:
+    """Overwrite the single fundamentals row per asset — this is a snapshot,
+    not a time series, so the latest ingested payload always wins."""
+    asset_id = ctx["known_tickers"][payload["ticker"]]
+    fields: dict[str, Any] = {
+        field: payload.get(field) for field in _FUNDAMENTALS_FIELDS
+    }
+    next_earnings = payload.get("next_earnings_date")
+    fields["next_earnings_date"] = _parse_date(next_earnings) if next_earnings else None
+    fields["source"] = payload.get("source", "mock")
+
+    existing = db.execute(
+        select(Fundamentals).where(Fundamentals.asset_id == asset_id)
+    ).scalar_one_or_none()
+    if existing is None:
+        db.add(Fundamentals(asset_id=asset_id, **fields))
+    else:
+        for key, value in fields.items():
+            setattr(existing, key, value)
+
+
 _UPSERTERS = {
     "prices": _upsert_price,
     "news": _upsert_news,
     "transcripts": _upsert_transcript,
+    "fundamentals": _upsert_fundamentals,
 }
 
 

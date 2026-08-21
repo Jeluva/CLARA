@@ -95,6 +95,33 @@ def check_sentiment_range(payload: dict[str, Any], _ctx: CheckContext) -> str | 
     return None
 
 
+def check_numeric_if_present(
+    field: str, *, minimum: float | None = None, maximum: float | None = None
+) -> Check:
+    """Factory: when present, the field must be numeric and within bounds.
+
+    Unlike `check_required`, a missing value is fine here — fundamentals
+    fields are frequently absent for a given ticker (e.g. a bond has no
+    P/E) and that's not a data-quality failure.
+    """
+
+    def _check(payload: dict[str, Any], _ctx: CheckContext) -> str | None:
+        value = payload.get(field)
+        if value is None:
+            return None
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return f"{field} is not numeric: {value!r}"
+        if minimum is not None and numeric < minimum:
+            return f"{field} must be >= {minimum}, got {numeric}"
+        if maximum is not None and numeric > maximum:
+            return f"{field} must be <= {maximum}, got {numeric}"
+        return None
+
+    return _check
+
+
 def check_required(*fields: str) -> Check:
     """Factory: each named field must be present and non-empty."""
 
@@ -124,6 +151,11 @@ CHECKS: dict[str, list[Check]] = {
     "transcripts": [
         check_required("video_id", "title"),
         check_sentiment_range,
+    ],
+    "fundamentals": [
+        check_required("ticker"),
+        check_ticker_exists,
+        check_numeric_if_present("market_cap", minimum=0),
     ],
 }
 

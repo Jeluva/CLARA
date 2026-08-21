@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from app.ingestion.fundamentals import run_mock_fundamentals_ingestion
 from app.ingestion.news import run_mock_news_ingestion
-from app.services.research_service import compare_assets
+from app.services.research_service import compare_assets, get_fundamentals
 from app.services.news_service import sentiment_series
 from app.storage.seed import seed_database
 
@@ -50,3 +51,19 @@ def test_sentiment_series_filtered_by_ticker(db: Session) -> None:
     all_points = sentiment_series(db)
     filtered = sentiment_series(db, "AAPL")
     assert len(filtered) <= len(all_points)
+
+
+def test_get_fundamentals_returns_none_before_ingestion(db: Session) -> None:
+    seed_database(db)
+    assert get_fundamentals(db, "AAPL") is None
+
+
+def test_get_fundamentals_after_ingestion(db: Session) -> None:
+    seed_database(db)
+    run_mock_fundamentals_ingestion(db)
+
+    result = get_fundamentals(db, "aapl")  # case-insensitive
+    assert result is not None
+    assert result["ticker"] == "AAPL"
+    assert result["market_cap"] is not None
+    assert result["updated_at"] is not None

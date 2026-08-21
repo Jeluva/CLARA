@@ -134,6 +134,7 @@ export function DataEntryPage() {
               { source: "prices", label: "Ingestar precios" },
               { source: "news", label: "Ingestar noticias" },
               { source: "transcripts", label: "Ingestar transcripciones" },
+              { source: "fundamentals", label: "Ingestar fundamentals" },
             ] as const).map(({ source, label }) => (
               <IngestionButton
                 key={source}
