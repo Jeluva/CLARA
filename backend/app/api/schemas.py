@@ -59,6 +59,30 @@ class CorrelationOut(BaseModel):
     matrix: list[list[float]]
 
 
+class FundamentalsOut(BaseModel):
+    ticker: str
+    source: str
+    updated_at: str | None
+    market_cap: float | None
+    pe_ratio: float | None
+    forward_pe: float | None
+    pb_ratio: float | None
+    ev_to_ebitda: float | None
+    peg_ratio: float | None
+    dividend_yield: float | None
+    payout_ratio: float | None
+    revenue_growth: float | None
+    earnings_growth: float | None
+    gross_margin: float | None
+    operating_margin: float | None
+    profit_margin: float | None
+    roe: float | None
+    debt_to_equity: float | None
+    analyst_target_mean: float | None
+    analyst_recommendation: str | None
+    next_earnings_date: str | None
+
+
 # --- Data-entry request models -----------------------------------------------
 
 

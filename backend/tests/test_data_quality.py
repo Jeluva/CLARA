@@ -65,3 +65,21 @@ def test_sentiment_in_range_passes() -> None:
 def test_unknown_table_quarantined() -> None:
     reason = run_checks("nonexistent", {}, CTX)
     assert reason is not None and "no checks registered" in reason
+
+
+def test_fundamentals_missing_optional_fields_passes() -> None:
+    # A bond has no P/E, no margins — absence isn't a quality failure.
+    payload = {"ticker": "AAPL", "market_cap": None, "pe_ratio": None}
+    assert run_checks("fundamentals", payload, CTX) is None
+
+
+def test_fundamentals_negative_market_cap_quarantined() -> None:
+    payload = {"ticker": "AAPL", "market_cap": -1.0}
+    reason = run_checks("fundamentals", payload, CTX)
+    assert reason is not None and "market_cap" in reason
+
+
+def test_fundamentals_unknown_ticker_quarantined() -> None:
+    payload = {"ticker": "ZZZZ", "market_cap": 1000.0}
+    reason = run_checks("fundamentals", payload, CTX)
+    assert reason is not None and "unknown ticker" in reason

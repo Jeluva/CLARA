@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import math
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analytics.indicators import macd, rsi, sma
 from app.services.market_data import price_series_by_ticker
+from app.storage.models.silver import Asset, Fundamentals
 
 
 def _clean(value: float) -> float | None:
@@ -44,6 +46,35 @@ def get_indicators(db: Session, ticker: str) -> dict:
         for i, idx in enumerate(series.index)
     ]
     return {"ticker": ticker.upper(), "points": points[-120:]}
+
+
+_FUNDAMENTALS_FIELDS = (
+    "market_cap", "pe_ratio", "forward_pe", "pb_ratio", "ev_to_ebitda",
+    "peg_ratio", "dividend_yield", "payout_ratio", "revenue_growth",
+    "earnings_growth", "gross_margin", "operating_margin", "profit_margin",
+    "roe", "debt_to_equity", "analyst_target_mean", "analyst_recommendation",
+)
+
+
+def get_fundamentals(db: Session, ticker: str) -> dict | None:
+    """Latest fundamentals snapshot for a ticker, or None if never ingested."""
+    ticker = ticker.upper()
+    row = db.execute(
+        select(Fundamentals)
+        .join(Asset, Asset.id == Fundamentals.asset_id)
+        .where(Asset.ticker == ticker)
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+
+    out: dict = {"ticker": ticker, "source": row.source}
+    for field in _FUNDAMENTALS_FIELDS:
+        out[field] = getattr(row, field)
+    out["next_earnings_date"] = (
+        row.next_earnings_date.isoformat() if row.next_earnings_date else None
+    )
+    out["updated_at"] = row.updated_at.isoformat() if row.updated_at else None
+    return out
 
 
 def compare_assets(db: Session, tickers: list[str]) -> list[dict]:
