@@ -19,10 +19,21 @@ identificada. Probar rutas alternativas a mano (`/soberanos`,
 Sin ejecutar el JS de la página no hay forma de ver qué endpoint llama ni
 qué forma tiene la respuesta. La sesión de Chrome (`claude-in-chrome`) no
 está conectada ("Browser extension is not connected") — necesita el usuario
-con la extensión instalada y logueado. `WebFetch` (que sí ejecuta/renderiza
-la página antes de convertir a markdown) tampoco recuperó las columnas de
-la tabla, probablemente porque son cargadas de forma asíncrona después del
-render inicial que WebFetch captura.
+con la extensión instalada y logueado. `WebFetch` tampoco sirve para esto:
+convierte el HTML a markdown pero **no ejecuta JavaScript**, así que ve lo
+mismo que `curl` — el shell vacío de la SPA, no la tabla ya poblada.
+
+## Una pista que se probó y no sirvió
+
+El `__NEXT_DATA__` extraído trae `"buildId":"K7XXdhfUk76VhtWrmEgqP"`
+(`"gsp":true`). Se probó `curl
+https://bonistas.com/_next/data/K7XXdhfUk76VhtWrmEgqP/index.json` (200 OK,
+sin Chrome) esperando que Next.js sirviera ahí los props estáticos con la
+tabla de bonos — pero devuelve exactamente el mismo `pageProps.pageJson`
+de metadata SEO que ya estaba en el HTML, nada de TIR/duration. Confirma
+que la tabla no es parte del build estático: se pide a un endpoint propio
+recién en el cliente, después de montar el JS. No repetir este intento; ir
+directo a la opción con Chrome de abajo.
 
 ## Qué hace falta para desbloquear
 

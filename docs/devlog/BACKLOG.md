@@ -397,19 +397,27 @@ expuestos por el trabajo reciente:
       en vez de ocultar la sección — a diferencia del badge de alertas
       del `TopNav` (que sí se oculta si no hay nada), acá tiene sentido
       confirmar que se miró y no hay nada, no simplemente no mostrar
-      nada. Sigue el mismo patrón defensivo que `usePortfolios`
-      (`Array.isArray(x) ? x... : []`) para tolerar una respuesta no-array
-      — lo destapó el mock de fetch de `shell.test.tsx`, que devuelve la
-      misma forma de objeto para cualquier endpoint; en vez de tocar ese
-      mock se siguió la convención que ya existía en el código de
-      producción. Verificado en vivo contra el backend real en el puerto
-      8001 (no pisar el 8000): se creó una alerta de precio que dispara
-      sobre AAPL y ya había una tesis con stop tocado de una prueba
-      anterior — ambas aparecen. La verificación visual en Chrome quedó
-      bloqueada porque la extensión no está conectada en esta sesión
-      ("Browser extension is not connected"); cubierto en cambio con los
-      datos reales confirmados por API, `tsc --noEmit`, build de
-      producción y vitest en verde (23 tests, sin errores no manejados).
+      nada. El mock de fetch de `shell.test.tsx` devolvía la misma forma
+      de objeto para cualquier endpoint, así que los tres `.filter()`
+      nuevos recibían un objeto en vez de un array y tiraban `TypeError`
+      en los tests existentes (2 unhandled rejections). Se corrigió el
+      mock para que sea consciente de la URL (los endpoints tipo lista
+      devuelven `[]`) en vez de agregar guardas `Array.isArray` en el
+      componente — `/api/alerts`/`/api/theses`/`/api/ingestion/freshness`
+      están tipados `response_model=list[...]` en el backend, así que un
+      array está garantizado en producción; una guarda ahí solo hubiera
+      escondido un cambio de forma real detrás de un falso "Todo en
+      orden". 2 tests nuevos en `executive-summary.test.tsx` (lo que
+      necesita atención se muestra y lo que no, no aparece; estado vacío
+      con las tres listas vacías). Verificado en vivo contra el backend
+      real en el puerto 8001 (no pisar el 8000): se creó una alerta de
+      precio que dispara sobre AAPL y ya había una tesis con stop tocado
+      de una prueba anterior — ambas aparecen. La verificación visual en
+      Chrome quedó bloqueada porque la extensión no está conectada en
+      esta sesión ("Browser extension is not connected"); cubierto en
+      cambio con los datos reales confirmados por API, `tsc --noEmit`,
+      build de producción y vitest en verde (25 tests, sin errores no
+      manejados).
 
 Con los ítems 2 y 3 hechos, v4 queda con un solo ítem pendiente (el 1,
 bonos soberanos) — ver `docs/BLOCKED.md`.

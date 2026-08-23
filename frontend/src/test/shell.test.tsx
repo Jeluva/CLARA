@@ -6,12 +6,26 @@ import App from "@/App";
 // The Portfolio page calls the API on mount; stub fetch so the shell renders
 // deterministically in jsdom.
 beforeEach(() => {
-  // Return a superset shape that satisfies every endpoint the Portfolio page
-  // calls, plus an empty positions list so the table renders without crashing.
+  // Array-shaped endpoints (portfolios, history, alerts, theses, freshness)
+  // must return an array — response_model=list[...] on the backend
+  // guarantees that in production, and components like ExecutiveSummary
+  // rely on it without their own defensive check. Everything else
+  // (health, portfolio overview, metrics, exposure) gets the superset
+  // object shape below.
+  const LIST_ENDPOINTS = [
+    "/portfolios",
+    "/history",
+    "/alerts",
+    "/theses",
+    "/ingestion/freshness",
+  ];
   vi.stubGlobal(
     "fetch",
-    vi.fn(() =>
-      Promise.resolve({
+    vi.fn((url: string) => {
+      if (LIST_ENDPOINTS.some((p) => url.includes(p))) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      return Promise.resolve({
         ok: true,
         json: () =>
           Promise.resolve({
@@ -30,8 +44,8 @@ beforeEach(() => {
             country: {},
             currency: {},
           }),
-      }),
-    ),
+      });
+    }),
   );
 });
 
