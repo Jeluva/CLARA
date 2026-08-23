@@ -204,8 +204,29 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
       contra el seed real (no mock): valores de peso sugerido en el rango
       esperado para AAPL/NVDA/KO/GGAL/AL30, tope funcionando. `tsc --noEmit`,
       build de producción y vitest en verde.
-- [ ] 8. **Alertas** (precio, sentimiento, valuación) en vez de depender de
-      entrar a mirar manualmente.
+- [x] 8. **Alertas.** Hecho: tabla silver nueva `alerts` (migración Alembic
+      `alerts`) — regla ticker + métrica (`price` / `sentiment` / `pe_ratio`)
+      + condición (`above` / `below`) + umbral. Sin scheduler ni canal de
+      notificación: `alert_service.list_alerts` evalúa cada regla en vivo
+      contra el mismo dato que ya muestran Resumen/Noticias/Fundamentals
+      (`latest_prices`, promedio de sentimiento de noticias, `pe_ratio` de
+      `fundamentals`), así queda tan fresco como la última ingestión — mismo
+      patrón que `thesis_service` computando status al leer. CRUD:
+      `GET /api/alerts?ticker=&only_triggered=`, `POST /api/alerts`,
+      `DELETE /api/alerts/{id}`. Pestaña nueva "Alertas" en
+      `AssetDetailPage`: formulario (métrica/condición/umbral) + lista con
+      badge de estado (disparada/en seguimiento/sin dato/inactiva) y valor
+      actual. Como no hay push/email, la visibilidad "sin entrar a mirar" es
+      un badge en el `TopNav` (visible en cualquier pestaña) con la cuenta de
+      alertas disparadas y un dropdown que linkea directo al activo. 10 tests
+      nuevos en `test_alert_service.py` (trigger/no-trigger por métrica,
+      sentimiento/PE sin dato, filtros, validaciones, delete). Verificado en
+      vivo contra un seed real (sqlite + `alembic upgrade head` +
+      `seed_cli` + ingestión mock de fundamentals, no mock de test): alerta
+      de precio y de P/E disparan correctamente contra AAPL real, alerta de
+      sentimiento con umbral no alcanzado queda "en seguimiento",
+      `only_triggered` filtra bien. `tsc --noEmit`, build de producción y
+      vitest en verde.
 - [ ] 9. **Indicador de frescura de datos** en la UI: cuándo se actualizó
       por última vez cada fuente (relevante por los workarounds de
       yfinance/proxy ya documentados en fase-12).

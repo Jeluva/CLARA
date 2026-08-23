@@ -186,6 +186,27 @@ class Thesis(Base):
     asset: Mapped[Asset] = relationship()
 
 
+class Alert(Base):
+    """A watch rule: metric + condition + threshold, evaluated live on every
+    read instead of via a background job -- no notification channel exists
+    yet, so "triggered" just means the condition currently holds (see
+    docs/devlog/BACKLOG.md, v2 item 8)."""
+
+    __tablename__ = "alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    # metric: price | sentiment | pe_ratio
+    metric: Mapped[str] = mapped_column(String(16))
+    # condition: above | below
+    condition: Mapped[str] = mapped_column(String(8))
+    threshold: Mapped[float] = mapped_column(Float)
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    asset: Mapped[Asset] = relationship()
+
+
 class YoutubeChannel(Base):
     """A YouTube channel followed for transcript ingestion. `channel_id` is
     the natural key (canonical YouTube channel ID, resolved from the handle

@@ -193,6 +193,26 @@ class ThesisOut(BaseModel):
     status: str
 
 
+class AlertCreate(BaseModel):
+    ticker: str = Field(min_length=1)
+    metric: str = Field(pattern="^(price|sentiment|pe_ratio)$")
+    condition: str = Field(pattern="^(above|below)$")
+    threshold: float
+
+
+class AlertOut(BaseModel):
+    id: int
+    ticker: str
+    metric: str
+    condition: str
+    threshold: float
+    active: bool
+    created_at: str
+    current_value: float | None
+    triggered: bool
+    status: str
+
+
 class IngestionResult(BaseModel):
     source: str
     promoted: int
