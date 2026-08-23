@@ -42,7 +42,7 @@ def test_duplicate_ticker_conflicts(db: Session) -> None:
 
 def test_create_position_requires_existing_asset(db: Session) -> None:
     with pytest.raises(crud.NotFoundError):
-        crud.create_position(db, ticker="ZZZZ", quantity=10, avg_cost=100)
+        crud.create_position(db, ticker="ZZZZ", portfolio_id=1, quantity=10, avg_cost=100)
 
 
 def test_create_position_rejects_non_positive(db: Session) -> None:
@@ -50,8 +50,20 @@ def test_create_position_rejects_non_positive(db: Session) -> None:
         db, ticker="AAPL", name="Apple", asset_class="cedear",
         sector="Tech", country="USA", currency="USD",
     )
+    portfolio = crud.create_portfolio(db, name="Test")
     with pytest.raises(crud.ConflictError):
-        crud.create_position(db, ticker="AAPL", quantity=0, avg_cost=100)
+        crud.create_position(
+            db, ticker="AAPL", portfolio_id=portfolio.id, quantity=0, avg_cost=100
+        )
+
+
+def test_create_position_requires_existing_portfolio(db: Session) -> None:
+    crud.create_asset(
+        db, ticker="AAPL", name="Apple", asset_class="cedear",
+        sector="Tech", country="USA", currency="USD",
+    )
+    with pytest.raises(crud.NotFoundError):
+        crud.create_position(db, ticker="AAPL", portfolio_id=999, quantity=10, avg_cost=100)
 
 
 def test_create_position_links_to_asset(db: Session) -> None:
@@ -59,12 +71,49 @@ def test_create_position_links_to_asset(db: Session) -> None:
         db, ticker="AAPL", name="Apple", asset_class="cedear",
         sector="Tech", country="USA", currency="USD",
     )
-    crud.create_position(db, ticker="AAPL", quantity=10, avg_cost=150)
+    portfolio = crud.create_portfolio(db, name="Test")
+    crud.create_position(
+        db, ticker="AAPL", portfolio_id=portfolio.id, quantity=10, avg_cost=150
+    )
     positions = crud.list_positions(db)
     assert len(positions) == 1
     position, asset = positions[0]
     assert asset.ticker == "AAPL"
     assert position.quantity == 10
+    assert position.portfolio_id == portfolio.id
+
+
+def test_list_positions_filters_by_portfolio(db: Session) -> None:
+    crud.create_asset(
+        db, ticker="AAPL", name="Apple", asset_class="cedear",
+        sector="Tech", country="USA", currency="USD",
+    )
+    crud.create_asset(
+        db, ticker="MSFT", name="Microsoft", asset_class="cedear",
+        sector="Tech", country="USA", currency="USD",
+    )
+    p1 = crud.create_portfolio(db, name="Portfolio 1")
+    p2 = crud.create_portfolio(db, name="Portfolio 2")
+    crud.create_position(db, ticker="AAPL", portfolio_id=p1.id, quantity=10, avg_cost=150)
+    crud.create_position(db, ticker="MSFT", portfolio_id=p2.id, quantity=5, avg_cost=300)
+
+    assert len(crud.list_positions(db, p1.id)) == 1
+    assert len(crud.list_positions(db, p2.id)) == 1
+    assert len(crud.list_positions(db)) == 2
+
+
+def test_create_portfolio_rejects_duplicate_name(db: Session) -> None:
+    crud.create_portfolio(db, name="Mi cartera")
+    with pytest.raises(crud.ConflictError):
+        crud.create_portfolio(db, name="Mi cartera")
+
+
+def test_rename_portfolio(db: Session) -> None:
+    portfolio = crud.create_portfolio(db, name="Original")
+    renamed = crud.rename_portfolio(db, portfolio.id, name="Renombrado")
+    assert renamed.name == "Renombrado"
+    with pytest.raises(crud.NotFoundError):
+        crud.rename_portfolio(db, 999, name="No existe")
 
 
 def test_delete_asset_cascades_to_prices(db: Session) -> None:

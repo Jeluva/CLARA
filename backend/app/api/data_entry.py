@@ -14,6 +14,8 @@ from app.api.schemas import (
     ChannelOut,
     FreshnessOut,
     IngestionResult,
+    PortfolioCreate,
+    PortfolioOut,
     PositionCreate,
     PositionOutFull,
     ThesisCreate,
@@ -58,9 +60,11 @@ def create_asset(body: AssetCreate, db: Session = Depends(get_db)) -> AssetOut:
 
 
 @router.get("/api/assets/{ticker}/summary")
-def asset_summary(ticker: str, db: Session = Depends(get_db)) -> dict:
+def asset_summary(
+    ticker: str, portfolio_id: int | None = None, db: Session = Depends(get_db)
+) -> dict:
     """Aggregated per-asset snapshot for the asset detail page."""
-    summary = asset_service.get_asset_summary(db, ticker)
+    summary = asset_service.get_asset_summary(db, ticker, portfolio_id)
     if summary is None:
         raise HTTPException(status_code=404, detail=f"No existe el activo {ticker}")
     return summary
@@ -88,17 +92,52 @@ def delete_asset(asset_id: int, db: Session = Depends(get_db)) -> Response:
     return Response(status_code=204)
 
 
+# --- Portfolios ----------------------------------------------------------------
+
+
+@router.get("/api/portfolios", response_model=list[PortfolioOut])
+def list_portfolios(db: Session = Depends(get_db)) -> list[PortfolioOut]:
+    return [PortfolioOut(**p.__dict__) for p in crud.list_portfolios(db)]
+
+
+@router.post("/api/portfolios", response_model=PortfolioOut, status_code=201)
+def create_portfolio(
+    body: PortfolioCreate, db: Session = Depends(get_db)
+) -> PortfolioOut:
+    try:
+        portfolio = crud.create_portfolio(db, name=body.name)
+    except crud.ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return PortfolioOut(**portfolio.__dict__)
+
+
+@router.patch("/api/portfolios/{portfolio_id}", response_model=PortfolioOut)
+def rename_portfolio(
+    portfolio_id: int, body: PortfolioCreate, db: Session = Depends(get_db)
+) -> PortfolioOut:
+    try:
+        portfolio = crud.rename_portfolio(db, portfolio_id, name=body.name)
+    except crud.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except crud.ConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return PortfolioOut(**portfolio.__dict__)
+
+
 # --- Positions ---------------------------------------------------------------
 
 
 @router.get("/api/positions", response_model=list[PositionOutFull])
-def list_positions(db: Session = Depends(get_db)) -> list[PositionOutFull]:
+def list_positions(
+    portfolio_id: int | None = None, db: Session = Depends(get_db)
+) -> list[PositionOutFull]:
     out: list[PositionOutFull] = []
-    for position, asset in crud.list_positions(db):
+    for position, asset in crud.list_positions(db, portfolio_id):
         out.append(
             PositionOutFull(
                 id=position.id,
                 ticker=asset.ticker,
+                portfolio_id=position.portfolio_id,
                 quantity=position.quantity,
                 avg_cost=position.avg_cost,
                 opened_at=position.opened_at,
@@ -125,6 +164,7 @@ def create_position(
     return PositionOutFull(
         id=position.id,
         ticker=asset.ticker,
+        portfolio_id=position.portfolio_id,
         quantity=position.quantity,
         avg_cost=position.avg_cost,
         opened_at=position.opened_at,

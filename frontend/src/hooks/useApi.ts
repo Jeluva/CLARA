@@ -9,10 +9,16 @@ export interface ApiState<T> {
 
 /**
  * Fetch-on-mount hook with loading/error state. `fetcher` is expected to be a
- * stable reference (module-level API function), so deps default to empty.
+ * stable reference (module-level API function) or a closure over `deps`, so
+ * refetch only happens on `reload()` or when a `deps` entry changes (e.g. the
+ * active portfolio) -- pass `deps` when the fetcher closes over something
+ * that can change while the page stays mounted.
  * `reload()` re-runs it — handy after a mutation the page just made.
  */
-export function useApi<T>(fetcher: () => Promise<T>): ApiState<T> {
+export function useApi<T>(
+  fetcher: () => Promise<T>,
+  deps: unknown[] = [],
+): ApiState<T> {
   const [state, setState] = useState<{
     data: T | null;
     loading: boolean;
@@ -39,7 +45,7 @@ export function useApi<T>(fetcher: () => Promise<T>): ApiState<T> {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version]);
+  }, [version, ...deps]);
 
   return { ...state, reload: () => setVersion((v) => v + 1) };
 }

@@ -45,6 +45,23 @@ class Asset(Base):
     )
 
 
+class Portfolio(Base):
+    """A named group of positions. Lets the user keep holdings from
+    different brokers/accounts organized separately and switch between them
+    in the UI (see docs/devlog/BACKLOG.md, v3 item 1). `portfolio_id=None`
+    on the read side means "all portfolios merged" -- there's no separate
+    aggregation path, merging positions across portfolios *is* the
+    no-filter case."""
+
+    __tablename__ = "portfolios"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    positions: Mapped[list[Position]] = relationship(back_populates="portfolio")
+
+
 class Position(Base):
     """An open or closed holding of an asset, with average cost basis."""
 
@@ -52,12 +69,14 @@ class Position(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    portfolio_id: Mapped[int] = mapped_column(ForeignKey("portfolios.id"), index=True)
     quantity: Mapped[float] = mapped_column(Float)
     avg_cost: Mapped[float] = mapped_column(Float)
     opened_at: Mapped[datetime] = mapped_column(DateTime)
     status: Mapped[str] = mapped_column(String(16), default="open")  # open|closed
 
     asset: Mapped[Asset] = relationship(back_populates="positions")
+    portfolio: Mapped[Portfolio] = relationship(back_populates="positions")
 
 
 class Transaction(Base):

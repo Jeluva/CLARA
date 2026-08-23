@@ -26,7 +26,9 @@ from sqlalchemy.orm import Session
 
 from app.quality.promote import promote_bronze
 from app.storage.models.bronze import BronzeRecord
-from app.storage.models.silver import Asset, Position, Transaction
+from app.storage.models.silver import Asset, Portfolio, Position, Transaction
+
+DEFAULT_PORTFOLIO_NAME = "TestPortfolio"
 
 # Reference date for the seed. Kept explicit (not "today") so the dataset is
 # fully reproducible regardless of when the seed runs. Deliberately set a couple
@@ -133,6 +135,14 @@ def seed_database(db: Session) -> dict[str, int]:
     """
     days = _business_days(SEED_END_DATE, TRADING_DAYS)
 
+    portfolio = db.execute(
+        select(Portfolio).where(Portfolio.name == DEFAULT_PORTFOLIO_NAME)
+    ).scalar_one_or_none()
+    if portfolio is None:
+        portfolio = Portfolio(name=DEFAULT_PORTFOLIO_NAME)
+        db.add(portfolio)
+        db.flush()
+
     for sa in SEED_ASSETS:
         asset = _upsert_asset(db, sa)
 
@@ -149,6 +159,7 @@ def seed_database(db: Session) -> dict[str, int]:
                 db.add(
                     Position(
                         asset_id=asset.id,
+                        portfolio_id=portfolio.id,
                         quantity=qty,
                         avg_cost=avg_cost,
                         opened_at=opened_at,

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/PageHeader";
+import { PortfolioSwitcher } from "@/components/PortfolioSwitcher";
 import { Card } from "@/components/Card";
 import { Metric } from "@/components/Metric";
 import { Donut } from "@/components/Donut";
@@ -8,6 +9,7 @@ import { PositionsTable } from "@/components/PositionsTable";
 import { RiskPanel } from "@/components/RiskPanel";
 import { Spinner, ErrorState } from "@/components/Spinner";
 import { useApi } from "@/hooks/useApi";
+import { usePortfolios } from "@/hooks/usePortfolios";
 import {
   getPortfolio,
   getMetrics,
@@ -27,24 +29,30 @@ type ChartMode = "basket" | "realized";
 
 /** Tab 1 — Portfolio (main). The showcase dashboard. */
 export function PortfolioPage() {
-  const overview = useApi(getPortfolio);
-  const metrics = useApi(getMetrics);
-  const exposure = useApi(getExposure);
-  const history = useApi(getHistory);
+  const { activeId } = usePortfolios();
+  const overview = useApi(() => getPortfolio(activeId), [activeId]);
+  const metrics = useApi(() => getMetrics(activeId), [activeId]);
+  const exposure = useApi(() => getExposure(activeId), [activeId]);
+  const history = useApi(() => getHistory(activeId), [activeId]);
   const [chartMode, setChartMode] = useState<ChartMode>("basket");
   const [realized, setRealized] = useState<RealizedPoint[] | null>(null);
 
   useEffect(() => {
+    setRealized(null);
+  }, [activeId]);
+
+  useEffect(() => {
     if (chartMode === "realized" && !realized) {
-      getRealizedHistory().then(setRealized);
+      getRealizedHistory(activeId).then(setRealized);
     }
-  }, [chartMode, realized]);
+  }, [chartMode, realized, activeId]);
 
   return (
     <div>
       <PageHeader
         title="Portfolio"
         question="¿Cómo está parada mi cartera hoy?"
+        adornment={<PortfolioSwitcher />}
       />
 
       {/* KPI row */}

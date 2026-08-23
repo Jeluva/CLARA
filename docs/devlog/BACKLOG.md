@@ -250,6 +250,69 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
 
 Con los ítems 7-9 tildados, la v2 queda completa.
 
+## v3 — organización: múltiples portfolios
+
+- [x] 1. **Selector de portfolio.** Hecho: tabla silver nueva `portfolios`
+      (id, nombre único, `created_at`) — `Position` ahora tiene
+      `portfolio_id` (FK, `NOT NULL`). Migración Alembic crea la tabla,
+      inserta un portfolio "TestPortfolio" (agrupa lo que antes eran
+      posiciones sin dueño) y hace el backfill antes de poner la columna
+      `NOT NULL` (SQLite no permite agregar una columna `NOT NULL` a una
+      tabla con filas en un solo paso). `portfolio_service` recibe
+      `portfolio_id: int | None` en cada función que lee posiciones
+      (`get_portfolio_overview`, `get_risk_metrics`, `get_exposure`,
+      `get_history`, `get_realized_history`, `get_correlation`,
+      `simulate_purchase`, `get_position_size_guide`) —
+      `portfolio_id=None` mergea todas las posiciones de todos los
+      portfolios, que es exactamente el pedido de "una opción que mergee
+      los portfolios para ver todas las posiciones en total": no hay un
+      camino de agregación separado, mergear es simplemente no filtrar.
+      CRUD nuevo: `GET/POST /api/portfolios`,
+      `PATCH /api/portfolios/{id}` (renombrar) — sin DELETE, no lo pidió
+      el usuario y cascadear borraría posiciones en silencio. Frontend:
+      `PortfolioProvider` (contexto + `localStorage`, sobrevive un
+      refresh) expone el portfolio activo a toda la app; `PortfolioSwitcher`
+      (flecha/chevron al lado del título "Portfolio") permite cambiar de
+      portfolio, ver "Todos" (mergeado), renombrar inline y crear uno
+      nuevo. `Ingreso de datos` ahora pide portfolio al crear una posición
+      y muestra a qué portfolio pertenece cada una en la tabla. La página
+      Portfolio, la card de posición en el resumen del detalle de activo
+      (`asset_service.get_asset_summary`) y las pestañas "Simular
+      compra"/"Tamaño de posición" quedan todas scopeadas al mismo
+      portfolio activo -- se detectó en revisión que dejar la card de
+      resumen mergeada mientras esas dos pestañas quedaban scopeadas
+      hubiera mostrado dos números de "cuánto tengo" distintos en la
+      misma pantalla. El chatbot (`chat_service`) sí queda mergeado a
+      propósito: es contexto para un LLM, no un número mostrado.
+      `research.get_correlation` queda sin cambios (mide diversificación
+      real de lo que se tiene, mergeado, como ya documentaba el ítem 2 de
+      v2) y `Transaction` queda sin `portfolio_id` (nada la lee todavía).
+      La migración inserta el portfolio default resolviendo su id **por
+      nombre** después del insert, no con un `id=1` hardcodeado -- en
+      Postgres un insert con id explícito no avanza la secuencia
+      `SERIAL`, así que el primer `POST /api/portfolios` en producción
+      hubiera chocado contra esa misma id (se detectó en revisión, antes
+      de deployar). 3 tests nuevos de aislamiento/merge/consistencia
+      (`test_portfolio_service.py`, `test_asset_service.py`) + 6 de CRUD
+      de portfolios en `test_crud_service.py` (151 tests backend en
+      verde). Verificado en vivo contra el backend real (no mock, puerto
+      alternativo para no pisar un proceso dev preexistente): overview
+      mergeado = overview de TestPortfolio antes de crear un segundo
+      portfolio; un segundo portfolio arranca vacío; una posición creada
+      en él no aparece en el primero y sí en el mergeado; rename
+      funciona; nombre duplicado devuelve 409; migración probada con
+      downgrade + upgrade en la misma corrida. Verificación de UI en
+      navegador bloqueada por el mismo límite de sandbox que el ítem 5
+      de v2 (no puede llegar a `localhost`); cubierto en cambio con
+      `tsc --noEmit`, build de producción y la suite de vitest en verde
+      (23 tests). **Pendiente para quien levante el servidor dev**: el
+      proceso de `uvicorn` que ya estaba corriendo en el puerto 8000 fue
+      levantado con el código *antes* de esta migración -- su modelo
+      `Position` en memoria no tiene `portfolio_id`, así que cualquier
+      alta de posición a través de él va a fallar contra la DB ya
+      migrada (violación NOT NULL). Reiniciarlo para que cargue el
+      código nuevo.
+
 ## Reglas del ciclo (para no gastar tokens de más)
 
 - Al empezar una tarea: leer SOLO los archivos que esa tarea menciona. No
