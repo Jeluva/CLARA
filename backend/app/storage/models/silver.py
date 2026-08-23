@@ -165,6 +165,27 @@ class Fundamentals(Base):
     asset: Mapped[Asset] = relationship()
 
 
+class Thesis(Base):
+    """A journal entry: why an asset was bought, price target and stop-loss,
+    conviction — kept alongside the position so the real outcome can be
+    contrasted against the original reasoning later (see
+    docs/devlog/BACKLOG.md, v2 item 6)."""
+
+    __tablename__ = "theses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), index=True)
+    note: Mapped[str] = mapped_column(Text)
+    price_at_entry: Mapped[float | None] = mapped_column(Float, nullable=True)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stop_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # conviction: baja | media | alta
+    conviction: Mapped[str] = mapped_column(String(16), default="media")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    asset: Mapped[Asset] = relationship()
+
+
 class YoutubeChannel(Base):
     """A YouTube channel followed for transcript ingestion. `channel_id` is
     the natural key (canonical YouTube channel ID, resolved from the handle

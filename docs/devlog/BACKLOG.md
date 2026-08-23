@@ -158,8 +158,26 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
       un problema del código); cubierto en cambio con `tsc --noEmit`, build
       de producción y la suite de vitest en verde, más las pruebas de
       `simulate_purchase` en `test_portfolio_service.py`.
-- [ ] 6. **Diario de tesis.** Por qué se compra, precio objetivo, stop-loss,
-      convicción, y contraste posterior con el resultado real.
+- [x] 6. **Diario de tesis.** Hecho: tabla silver nueva `theses` (migración
+      Alembic `thesis`) — un activo puede tener muchas entradas de tesis a lo
+      largo del tiempo, cada una con motivo (texto libre), precio objetivo,
+      stop-loss, convicción (baja/media/alta) y `price_at_entry` (capturado
+      automáticamente del último precio al crearla, para poder contrastar
+      después). `thesis_service.py` calcula en cada lectura el contraste
+      contra el precio real actual: retorno desde la entrada y un status
+      (`en_curso` / `objetivo_alcanzado` si el precio ya superó el target /
+      `stop_tocado` si cayó al stop / `sin_precio` si el activo no tiene
+      precio ingerido). CRUD completo: `GET /api/theses?ticker=` (filtro
+      opcional), `POST /api/theses`, `DELETE /api/theses/{id}` — mismo patrón
+      de errores tipados (404/400) que `crud_service.py`. Pestaña nueva
+      "Diario de tesis" en `AssetDetailPage`: formulario (motivo, objetivo y
+      stop opcionales, convicción) + historial con badge de estado y retorno
+      desde la entrada coloreado. Se agregó `Textarea` a `components/Field.tsx`
+      (no existía, solo `Input`/`Select`). Probado en vivo contra el backend
+      real: creación con `price_at_entry` capturado del precio real de AAPL,
+      status `objetivo_alcanzado` cuando el target queda por debajo del
+      precio actual, `stop_tocado` cuando el stop queda por encima, y delete
+      funcionando. 10 tests nuevos en `test_thesis_service.py`.
 - [ ] 7. **Guía de tamaño de posición** según volatilidad del activo y
       presupuesto de riesgo de la cartera.
 - [ ] 8. **Alertas** (precio, sentimiento, valuación) en vez de depender de
