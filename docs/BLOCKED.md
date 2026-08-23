@@ -52,4 +52,4 @@ directo a la opción con Chrome de abajo.
 
 ## Qué NO está bloqueado
 
-El resto de v4 (ítems 2 y 3) no depende de esto y se hace mientras tanto.
+El resto de v4 (ítems 2 y 3) no dependía de esto y ya está hecho.
