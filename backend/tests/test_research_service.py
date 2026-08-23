@@ -28,6 +28,22 @@ def test_compare_assets_returns_metrics(db: Session) -> None:
         assert "sharpe" in item
 
 
+def test_compare_assets_includes_valuation(db: Session) -> None:
+    seed_database(db)
+    run_mock_fundamentals_ingestion(db)
+    result = compare_assets(db, ["AAPL", "MSFT"])
+    for item in result:
+        assert "pe_ratio" in item
+        assert "dividend_yield" in item
+        assert "roe" in item
+
+
+def test_compare_assets_valuation_none_before_ingestion(db: Session) -> None:
+    seed_database(db)
+    result = compare_assets(db, ["AAPL"])
+    assert result[0]["pe_ratio"] is None
+
+
 def test_compare_assets_unknown_ticker(db: Session) -> None:
     seed_database(db)
     result = compare_assets(db, ["AAPL", "ZZZZ"])

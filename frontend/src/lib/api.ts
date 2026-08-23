@@ -298,6 +298,12 @@ export interface AssetComparison {
   volatility?: number;
   max_drawdown?: number;
   sharpe?: number;
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  pb_ratio: number | null;
+  ev_to_ebitda: number | null;
+  dividend_yield: number | null;
+  roe: number | null;
 }
 
 export const compareAssets = (tickers: string[]) =>

@@ -77,19 +77,40 @@ def get_fundamentals(db: Session, ticker: str) -> dict | None:
     return out
 
 
+_COMPARE_VALUATION_FIELDS = (
+    "pe_ratio", "forward_pe", "pb_ratio", "ev_to_ebitda", "dividend_yield", "roe",
+)
+
+
 def compare_assets(db: Session, tickers: list[str]) -> list[dict]:
-    """Side-by-side comparison of key metrics for selected tickers."""
+    """Side-by-side comparison of price/risk and valuation metrics for
+    selected tickers — answers not just "how did it perform" but also
+    "is it cheap or expensive" (see docs/devlog/BACKLOG.md, v2 item 4)."""
     from app.analytics.returns import daily_returns, total_return
     from app.analytics.risk import max_drawdown, sharpe_ratio, volatility
 
     result = []
     all_series = price_series_by_ticker(db, [t.upper() for t in tickers])
+    fundamentals_by_ticker = {
+        asset_ticker: fund
+        for asset_ticker, fund in db.execute(
+            select(Asset.ticker, Fundamentals)
+            .join(Fundamentals, Fundamentals.asset_id == Asset.id)
+            .where(Asset.ticker.in_([t.upper() for t in tickers]))
+        ).all()
+    }
 
     for ticker in tickers:
         t = ticker.upper()
         series = all_series.get(t)
+        fund = fundamentals_by_ticker.get(t)
+        valuation = {
+            field: round(value, 4) if (value := (getattr(fund, field) if fund else None)) is not None else None
+            for field in _COMPARE_VALUATION_FIELDS
+        }
+
         if series is None or series.size < 2:
-            result.append({"ticker": t, "data_points": 0})
+            result.append({"ticker": t, "data_points": 0, **valuation})
             continue
 
         closes = series.to_numpy(dtype=float)
@@ -105,6 +126,7 @@ def compare_assets(db: Session, tickers: list[str]) -> list[dict]:
             "volatility": round(float(volatility(rets) * 100), 2),
             "max_drawdown": round(float(max_drawdown(closes) * 100), 2),
             "sharpe": round(float(sharpe_ratio(rets)), 2),
+            **valuation,
         })
 
     return result
