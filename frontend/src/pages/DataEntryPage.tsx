@@ -130,6 +130,7 @@ export function DataEntryPage() {
 
         <TransactionForm
           assets={assets}
+          portfolios={portfolios}
           onCreate={async (body) => {
             try {
               await createTransaction(body);
@@ -455,29 +456,42 @@ function PositionForm({
 
 function TransactionForm({
   assets,
+  portfolios,
   onCreate,
 }: {
   assets: Asset[];
+  portfolios: Portfolio[];
   onCreate: (body: {
     ticker: string;
+    portfolio_id: number;
     type: "buy" | "sell";
     quantity: number;
     price: number;
     fee: number;
   }) => Promise<void>;
 }) {
+  const { activeId } = usePortfolios();
   const [ticker, setTicker] = useState("");
+  const [portfolioId, setPortfolioId] = useState("");
   const [type, setType] = useState<"buy" | "sell">("buy");
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
   const [fee, setFee] = useState("0");
   const [busy, setBusy] = useState(false);
 
+  // Same default rule as PositionForm: fall back to the active portfolio,
+  // or the first one when "Todos" (activeId=null) is selected.
+  const defaultPortfolioId =
+    (activeId !== null && portfolios.some((p) => p.id === activeId)
+      ? activeId
+      : portfolios[0]?.id) ?? "";
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     await onCreate({
       ticker: ticker || assets[0]?.ticker || "",
+      portfolio_id: Number(portfolioId || defaultPortfolioId),
       type,
       quantity: Number(quantity),
       price: Number(price),
@@ -498,6 +512,19 @@ function TransactionForm({
             {assets.map((a) => (
               <option key={a.id} value={a.ticker}>
                 {a.ticker}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Portfolio">
+          <Select
+            value={portfolioId || String(defaultPortfolioId)}
+            onChange={(e) => setPortfolioId(e.target.value)}
+          >
+            {portfolios.length === 0 && <option value="">Sin portfolios</option>}
+            {portfolios.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
               </option>
             ))}
           </Select>
@@ -544,7 +571,10 @@ function TransactionForm({
           />
         </Field>
         <div className="col-span-2 mt-1">
-          <Button type="submit" disabled={busy || assets.length === 0}>
+          <Button
+            type="submit"
+            disabled={busy || assets.length === 0 || portfolios.length === 0}
+          >
             {busy ? "Guardando…" : "Registrar"}
           </Button>
         </div>
