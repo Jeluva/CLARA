@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { PortfolioSwitcher } from "@/components/PortfolioSwitcher";
+import { ExecutiveSummary } from "@/components/ExecutiveSummary";
 import { Card } from "@/components/Card";
 import { Metric } from "@/components/Metric";
 import { Donut } from "@/components/Donut";
@@ -54,6 +55,8 @@ export function PortfolioPage() {
         question="¿Cómo está parada mi cartera hoy?"
         adornment={<PortfolioSwitcher />}
       />
+
+      <ExecutiveSummary />
 
       {/* KPI row */}
       <Card className="mb-5">

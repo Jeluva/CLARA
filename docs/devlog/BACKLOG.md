@@ -383,12 +383,36 @@ expuestos por el trabajo reciente:
       decían que no existía. Si alguien tiene una terminal propia con
       ese proceso, reiniciarlo a mano; si no, probablemente sea un
       proceso zombie de Windows que un reinicio de la máquina resuelve.
-- [ ] 3. **Resumen ejecutivo.** Nueva vista (o sección en Portfolio) que
-      junta: alertas disparadas, tesis con status `objetivo_alcanzado` o
-      `stop_tocado`, y fuentes con frescura `nunca`/`corrió pero no
-      promovió nada` — todo ya calculado por los servicios existentes
-      (`alert_service`, `thesis_service`, `freshness_service`), esto es
-      composición de UI, no cálculo nuevo.
+- [x] 3. **Resumen ejecutivo.** Hecho: `ExecutiveSummary`, sección nueva
+      arriba de todo en Portfolio (la pestaña de arranque), tres columnas
+      — alertas disparadas (`GET /api/alerts?only_triggered=true`), tesis
+      con status `objetivo_alcanzado`/`stop_tocado` (filtradas del lado
+      del cliente sobre `GET /api/theses`) y fuentes con frescura `nunca`
+      o "corrió sin promover nada nuevo" (mismo criterio que
+      `FreshnessList` en Ingreso de datos, sobre `GET
+      /api/ingestion/freshness`). Sin cálculo nuevo: pura composición de
+      lo que `alert_service`/`thesis_service`/`freshness_service` ya
+      devuelven. Cada fila es clickeable → `/activo/:ticker` (o
+      `/datos` para frescura). Estado vacío explícito ("Todo en orden")
+      en vez de ocultar la sección — a diferencia del badge de alertas
+      del `TopNav` (que sí se oculta si no hay nada), acá tiene sentido
+      confirmar que se miró y no hay nada, no simplemente no mostrar
+      nada. Sigue el mismo patrón defensivo que `usePortfolios`
+      (`Array.isArray(x) ? x... : []`) para tolerar una respuesta no-array
+      — lo destapó el mock de fetch de `shell.test.tsx`, que devuelve la
+      misma forma de objeto para cualquier endpoint; en vez de tocar ese
+      mock se siguió la convención que ya existía en el código de
+      producción. Verificado en vivo contra el backend real en el puerto
+      8001 (no pisar el 8000): se creó una alerta de precio que dispara
+      sobre AAPL y ya había una tesis con stop tocado de una prueba
+      anterior — ambas aparecen. La verificación visual en Chrome quedó
+      bloqueada porque la extensión no está conectada en esta sesión
+      ("Browser extension is not connected"); cubierto en cambio con los
+      datos reales confirmados por API, `tsc --noEmit`, build de
+      producción y vitest en verde (23 tests, sin errores no manejados).
+
+Con los ítems 2 y 3 hechos, v4 queda con un solo ítem pendiente (el 1,
+bonos soberanos) — ver `docs/BLOCKED.md`.
 
 ## Reglas del ciclo (para no gastar tokens de más)
 
