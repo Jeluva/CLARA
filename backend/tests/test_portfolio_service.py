@@ -152,4 +152,49 @@ def test_simulate_purchase_rejects_non_positive_amount(db: Session) -> None:
         svc.simulate_purchase(db, "AAPL", 0.0)
 
 
+def test_position_size_guide_scales_inversely_with_volatility(db: Session) -> None:
+    """NVDA (annual_vol=0.50 in the seed) is riskier than KO (0.16), so the
+    same risk budget should suggest a smaller weight for NVDA."""
+    seed_database(db)
+    nvda = svc.get_position_size_guide(db, "NVDA")
+    ko = svc.get_position_size_guide(db, "KO")
+    assert nvda.volatility > ko.volatility
+    assert nvda.target_weight_pct < ko.target_weight_pct
+    assert 0.0 <= nvda.target_weight_pct <= svc.MAX_POSITION_WEIGHT + 1e-9
+    assert 0.0 <= ko.target_weight_pct <= svc.MAX_POSITION_WEIGHT + 1e-9
+
+
+def test_position_size_guide_ars_ticker_normalizes_to_usd(db: Session) -> None:
+    """GGAL is ARS-denominated; current_price/target_amount must be USD (via
+    the fixed 1000.0 test rate), not the raw peso price."""
+    seed_database(db)
+    result = svc.get_position_size_guide(db, "GGAL")
+    overview = svc.get_portfolio_overview(db)
+    ggal = next(p for p in overview.positions if p.ticker == "GGAL")
+    # current_amount must match the USD-normalized market value the
+    # portfolio overview already reports, not a peso-scale figure.
+    assert result.current_amount == pytest.approx(ggal.market_value, rel=1e-3)
+    assert result.current_price == pytest.approx(ggal.latest_price, rel=1e-3)
+
+
+def test_position_size_guide_caps_at_max_weight(db: Session) -> None:
+    seed_database(db)
+    result = svc.get_position_size_guide(db, "KO", risk_budget_pct=1.0)
+    assert result.capped is True
+    assert result.target_weight_pct == pytest.approx(svc.MAX_POSITION_WEIGHT, rel=1e-6)
+    assert any("tope" in w for w in result.warnings)
+
+
+def test_position_size_guide_unknown_ticker_raises(db: Session) -> None:
+    seed_database(db)
+    with pytest.raises(ValueError):
+        svc.get_position_size_guide(db, "NOPE")
+
+
+def test_position_size_guide_rejects_non_positive_budget(db: Session) -> None:
+    seed_database(db)
+    with pytest.raises(ValueError):
+        svc.get_position_size_guide(db, "AAPL", risk_budget_pct=0.0)
+
+
 import pytest  # noqa: E402  (kept at bottom; used by approx above)

@@ -82,6 +82,24 @@ class SimulationOut(BaseModel):
     warnings: list[str]
 
 
+class PositionSizeOut(BaseModel):
+    ticker: str
+    current_price: float
+    volatility: float
+    risk_budget_pct: float
+    risk_budget_amount: float
+    portfolio_total_value: float
+    target_amount: float
+    target_weight_pct: float
+    current_amount: float
+    current_weight_pct: float
+    delta_amount: float
+    delta_quantity: float
+    capped: bool
+    max_weight_cap: float
+    warnings: list[str]
+
+
 class FundamentalsOut(BaseModel):
     ticker: str
     source: str

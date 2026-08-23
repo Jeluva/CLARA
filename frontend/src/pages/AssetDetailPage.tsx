@@ -13,6 +13,7 @@ import {
   getAssetSummary,
   getIndicators,
   getNews,
+  getPositionSizeGuide,
   createAsset,
   createThesis,
   deleteThesis,
@@ -21,6 +22,7 @@ import {
   simulatePurchase,
   type AssetSummary,
   type Conviction,
+  type PositionSizeGuide,
   type SentimentLabel,
   type Simulation,
   type Thesis,
@@ -34,13 +36,14 @@ import {
   pnlColor,
 } from "@/lib/format";
 
-type Tab = "resumen" | "noticias" | "tecnico" | "simular" | "tesis" | "chatbot";
+type Tab = "resumen" | "noticias" | "tecnico" | "simular" | "tamano" | "tesis" | "chatbot";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "resumen", label: "Resumen" },
   { id: "noticias", label: "Noticias" },
   { id: "tecnico", label: "Análisis técnico" },
   { id: "simular", label: "Simular compra" },
+  { id: "tamano", label: "Tamaño de posición" },
   { id: "tesis", label: "Diario de tesis" },
   { id: "chatbot", label: "Chatbot IA" },
 ];
@@ -136,6 +139,7 @@ export function AssetDetailPage() {
           {tab === "noticias" && <NoticiasTab ticker={ticker} />}
           {tab === "tecnico" && <TecnicoTab ticker={ticker} />}
           {tab === "simular" && <SimularTab ticker={ticker} summary={summary.data} />}
+          {tab === "tamano" && <TamanioTab ticker={ticker} />}
           {tab === "tesis" && <TesisTab ticker={ticker} />}
           {tab === "chatbot" && (
             <Card title="Análisis fundamental con IA" subtitle={`Asistente sobre ${ticker}`}>
@@ -627,6 +631,132 @@ function SimularTab({ ticker, summary }: { ticker: string; summary: AssetSummary
               after={result.exposure_after.currency}
             />
           </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** Guía de tamaño de posición: cuánto sugiere tener en este activo un
+ * presupuesto de riesgo escalado por su volatilidad anualizada — más
+ * volatilidad, menos peso para el mismo presupuesto de riesgo
+ * (docs/devlog/BACKLOG.md, v2 item 7). */
+function TamanioTab({ ticker }: { ticker: string }) {
+  const [riskBudgetPct, setRiskBudgetPct] = useState("3");
+  const [result, setResult] = useState<PositionSizeGuide | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [noPrice, setNoPrice] = useState(false);
+
+  async function run() {
+    const pct = Number(riskBudgetPct);
+    if (!pct || pct <= 0 || pct > 100) {
+      setError("Ingresá un presupuesto de riesgo entre 0 y 100%.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setNoPrice(false);
+    try {
+      setResult(await getPositionSizeGuide(ticker, pct / 100));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        setNoPrice(true);
+        setResult(null);
+      } else {
+        setError(e instanceof ApiError ? e.message : "No se pudo calcular la guía");
+        setResult(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticker]);
+
+  return (
+    <Card
+      title="Tamaño de posición"
+      subtitle="Cuánto sugiere tener en este activo tu presupuesto de riesgo, según su volatilidad"
+    >
+      <div className="mb-5 flex items-end gap-3">
+        <div className="w-56">
+          <Field label="Presupuesto de riesgo (% de volatilidad anual.)">
+            <Input
+              value={riskBudgetPct}
+              onChange={(e) => setRiskBudgetPct(e.target.value)}
+              inputMode="decimal"
+            />
+          </Field>
+        </div>
+        <Button onClick={run} disabled={loading}>
+          {loading ? "Calculando…" : "Calcular"}
+        </Button>
+      </div>
+
+      {error && <p className="mb-4 text-sm text-loss">{error}</p>}
+
+      {noPrice && (
+        <p className="py-6 text-sm text-secondary">
+          Sin precio para {ticker} todavía — corré la ingestión de precios
+          primero para poder calcular su volatilidad.
+        </p>
+      )}
+
+      {result && (
+        <div className="space-y-5">
+          {result.warnings.length > 0 && (
+            <ul className="rounded-control border border-separator bg-separator/20 p-3 text-xs text-secondary">
+              {result.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+
+          <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+            <Metric label="Volatilidad (anual.)" value={formatPercent(result.volatility)} />
+            <Metric
+              label="Tamaño sugerido"
+              value={formatCurrency(result.target_amount)}
+              sub={
+                <span>
+                  {formatPercent(result.target_weight_pct)} de la cartera
+                  {result.capped ? " (tope de concentración)" : ""}
+                </span>
+              }
+            />
+            <Metric
+              label="Posición actual"
+              value={formatCurrency(result.current_amount)}
+              sub={formatPercent(result.current_weight_pct)}
+            />
+            <Metric
+              label={result.delta_amount >= 0 ? "Podrías sumar" : "Por encima de lo sugerido"}
+              value={
+                <span className={pnlColor(result.delta_amount)}>
+                  {formatSignedCurrency(result.delta_amount)}
+                </span>
+              }
+              sub={
+                <span className="text-secondary">
+                  ≈{" "}
+                  {Math.abs(result.delta_quantity).toLocaleString("en-US", {
+                    maximumFractionDigits: 4,
+                  })}{" "}
+                  unidades {result.delta_amount >= 0 ? "" : "de más"}
+                </span>
+              }
+            />
+          </div>
+
+          <p className="text-xs text-secondary">
+            Regla: (valor de cartera × presupuesto de riesgo) ÷ volatilidad
+            anualizada, limitado a un máximo de {formatPercent(result.max_weight_cap)}{" "}
+            de la cartera por posición.
+          </p>
         </div>
       )}
     </Card>

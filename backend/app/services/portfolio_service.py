@@ -33,6 +33,13 @@ from app.storage.models.silver import Asset, Position
 
 BENCHMARK_TICKER = "SPY"
 
+# Position-sizing guide (BACKLOG v2 item 7): default fraction of annualized
+# volatility a single position may contribute, and the hard ceiling on how
+# much of the portfolio one position can take regardless of how low its
+# volatility is (relevant for bonds, whose vol can be near zero).
+DEFAULT_RISK_BUDGET_PCT = 0.03
+MAX_POSITION_WEIGHT = 0.25
+
 
 @dataclass
 class PortfolioOverview:
@@ -54,6 +61,25 @@ class RiskMetrics:
     cumulative_return: float
     top3_concentration: float
     herfindahl: float
+
+
+@dataclass
+class PositionSizeGuide:
+    ticker: str
+    current_price: float
+    volatility: float
+    risk_budget_pct: float
+    risk_budget_amount: float
+    portfolio_total_value: float
+    target_amount: float
+    target_weight_pct: float
+    current_amount: float
+    current_weight_pct: float
+    delta_amount: float
+    delta_quantity: float
+    capped: bool
+    max_weight_cap: float
+    warnings: list[str]
 
 
 @dataclass
@@ -465,5 +491,100 @@ def simulate_purchase(db: Session, ticker: str, amount: float) -> SimulationResu
         correlation_to_portfolio=correlation_to_portfolio,
         exposure_before=_exposure_snapshot(current_snapshots),
         exposure_after=_exposure_snapshot(after_snapshots),
+        warnings=warnings,
+    )
+
+
+def get_position_size_guide(
+    db: Session, ticker: str, risk_budget_pct: float = DEFAULT_RISK_BUDGET_PCT
+) -> PositionSizeGuide:
+    """How much of this asset the volatility-scaled risk budget suggests holding
+    (see docs/devlog/BACKLOG.md, v2 item 7).
+
+    Rule: target dollar allocation = (portfolio value * risk_budget_pct) /
+    annualized volatility -- a higher-volatility asset gets a smaller slice
+    for the same contribution to portfolio risk. `risk_budget_pct` is
+    expressed in annualized-volatility units (not the stop-distance
+    convention used by `theses.stop_loss`), and the result is capped at
+    `MAX_POSITION_WEIGHT` of the portfolio so a very low-vol asset (e.g. a
+    bond) doesn't get sized into an outsized concentration.
+
+    Raises ValueError (-> 404 at the router) when the ticker doesn't exist or
+    has no price series to compute volatility from.
+    """
+    ticker = ticker.upper()
+    if risk_budget_pct <= 0:
+        raise ValueError("El presupuesto de riesgo debe ser mayor a cero.")
+
+    asset = db.execute(select(Asset).where(Asset.ticker == ticker)).scalar_one_or_none()
+    if asset is None:
+        raise ValueError(f"{ticker} no existe. Agregalo primero en Ingreso de datos.")
+
+    series = price_series_by_ticker(db, [ticker]).get(ticker)
+    if series is None or series.size < 2:
+        raise ValueError(f"Sin precio para {ticker}. Corré la ingestión de precios primero.")
+
+    closes = series.to_numpy(dtype=float)
+    vol = risk.volatility(daily_returns(closes))
+
+    # Same USD normalization as simulate_purchase: the series is in the
+    # asset's native currency, but portfolio values (and therefore the
+    # target amount) are always USD.
+    rate = fx_service.usd_ars_rate() if asset.currency.upper() == "ARS" else None
+    current_price = float(closes[-1]) / rate if rate else float(closes[-1])
+
+    overview = get_portfolio_overview(db)
+    total_value = overview.total_value or 0.0
+    risk_budget_amount = total_value * risk_budget_pct
+
+    warnings: list[str] = []
+    capped = False
+    if vol <= 0:
+        warnings.append(
+            "Sin volatilidad calculable (historial muy corto o precio "
+            "constante) — no se puede aplicar la guía."
+        )
+        target_amount = 0.0
+    else:
+        target_amount = risk_budget_amount / vol
+        max_amount = total_value * MAX_POSITION_WEIGHT
+        if total_value > 0 and target_amount > max_amount:
+            target_amount = max_amount
+            capped = True
+            warnings.append(
+                "El tamaño sugerido por volatilidad superaba el tope de "
+                f"concentración ({MAX_POSITION_WEIGHT:.0%} de la cartera) y "
+                "se limitó a ese tope."
+            )
+
+    if total_value == 0:
+        warnings.append(
+            "La cartera está vacía: esta guía necesita un valor de cartera "
+            "existente contra el cual dimensionar el presupuesto de riesgo."
+        )
+
+    held = next((p for p in _position_inputs(db) if p.ticker == ticker), None)
+    current_amount = held.quantity * held.latest_price if held else 0.0
+    current_weight_pct = (current_amount / total_value) if total_value else 0.0
+    target_weight_pct = (target_amount / total_value) if total_value else 0.0
+
+    delta_amount = target_amount - current_amount
+    delta_quantity = delta_amount / current_price if current_price else 0.0
+
+    return PositionSizeGuide(
+        ticker=ticker,
+        current_price=round(current_price, 4),
+        volatility=round(vol, 6),
+        risk_budget_pct=risk_budget_pct,
+        risk_budget_amount=round(risk_budget_amount, 2),
+        portfolio_total_value=round(total_value, 2),
+        target_amount=round(target_amount, 2),
+        target_weight_pct=round(target_weight_pct, 6),
+        current_amount=round(current_amount, 2),
+        current_weight_pct=round(current_weight_pct, 6),
+        delta_amount=round(delta_amount, 2),
+        delta_quantity=round(delta_quantity, 6),
+        capped=capped,
+        max_weight_cap=MAX_POSITION_WEIGHT,
         warnings=warnings,
     )
