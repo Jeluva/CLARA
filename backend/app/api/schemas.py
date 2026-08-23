@@ -59,6 +59,29 @@ class CorrelationOut(BaseModel):
     matrix: list[list[float]]
 
 
+class SimulationRequest(BaseModel):
+    ticker: str = Field(min_length=1)
+    amount: float = Field(gt=0)
+
+
+class SimulationOut(BaseModel):
+    ticker: str
+    amount: float
+    quantity_added: float
+    already_held: bool
+    new_weight: float
+    total_value_before: float
+    total_value_after: float
+    top3_before: float
+    top3_after: float
+    herfindahl_before: float
+    herfindahl_after: float
+    correlation_to_portfolio: float | None
+    exposure_before: dict[str, dict[str, float]]
+    exposure_after: dict[str, dict[str, float]]
+    warnings: list[str]
+
+
 class FundamentalsOut(BaseModel):
     ticker: str
     source: str

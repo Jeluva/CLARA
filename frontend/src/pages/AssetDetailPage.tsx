@@ -5,7 +5,7 @@ import { Metric } from "@/components/Metric";
 import { SentimentTag } from "@/components/SentimentTag";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { Chatbot } from "@/components/Chatbot";
-import { Button } from "@/components/Field";
+import { Button, Field, Input } from "@/components/Field";
 import { Spinner, ErrorState } from "@/components/Spinner";
 import { useApi, type ApiState } from "@/hooks/useApi";
 import {
@@ -15,8 +15,10 @@ import {
   getNews,
   createAsset,
   runIngestion,
+  simulatePurchase,
   type AssetSummary,
   type SentimentLabel,
+  type Simulation,
 } from "@/lib/api";
 import {
   formatCurrency,
@@ -26,12 +28,13 @@ import {
   pnlColor,
 } from "@/lib/format";
 
-type Tab = "resumen" | "noticias" | "tecnico" | "chatbot";
+type Tab = "resumen" | "noticias" | "tecnico" | "simular" | "chatbot";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "resumen", label: "Resumen" },
   { id: "noticias", label: "Noticias" },
   { id: "tecnico", label: "Análisis técnico" },
+  { id: "simular", label: "Simular compra" },
   { id: "chatbot", label: "Chatbot IA" },
 ];
 
@@ -125,6 +128,7 @@ export function AssetDetailPage() {
           {tab === "resumen" && <ResumenTab summary={summary} />}
           {tab === "noticias" && <NoticiasTab ticker={ticker} />}
           {tab === "tecnico" && <TecnicoTab ticker={ticker} />}
+          {tab === "simular" && <SimularTab ticker={ticker} summary={summary.data} />}
           {tab === "chatbot" && (
             <Card title="Análisis fundamental con IA" subtitle={`Asistente sobre ${ticker}`}>
               <Chatbot ticker={ticker} />
@@ -290,6 +294,168 @@ function TecnicoTab({ ticker }: { ticker: string }) {
       {indicators.loading && <Spinner />}
       {indicators.error && <ErrorState message={indicators.error} />}
       {indicators.data && <TechnicalChart points={indicators.data.points} />}
+    </Card>
+  );
+}
+
+/** One category's exposure before vs. after the simulated purchase — only
+ * rendered for the asset's own sector/country/currency, since that's what a
+ * single purchase can meaningfully move. */
+function ExposureShift({
+  label,
+  category,
+  before,
+  after,
+}: {
+  label: string;
+  category: string | null;
+  before: Record<string, number>;
+  after: Record<string, number>;
+}) {
+  if (!category) return null;
+  const b = before[category] ?? 0;
+  const a = after[category] ?? 0;
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-secondary">
+        {label} · {category}
+      </p>
+      <p className="tabnum text-base font-medium text-primary">
+        {formatPercent(b)} → {formatPercent(a)}
+      </p>
+    </div>
+  );
+}
+
+/** "Qué pasa si compro esto": impacto de una compra hipotética en
+ * concentración, exposición y correlación — sin tocar ninguna posición
+ * real (docs/devlog/BACKLOG.md, v2 item 5). */
+function SimularTab({ ticker, summary }: { ticker: string; summary: AssetSummary | null }) {
+  const [amount, setAmount] = useState("1000");
+  const [result, setResult] = useState<Simulation | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run() {
+    const value = Number(amount);
+    if (!value || value <= 0) {
+      setError("Ingresá un monto válido.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      setResult(await simulatePurchase(ticker, value));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "No se pudo simular la compra");
+      setResult(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const top3Delta = result ? result.top3_after - result.top3_before : 0;
+  const hhiDelta = result ? result.herfindahl_after - result.herfindahl_before : 0;
+
+  return (
+    <Card
+      title="Simular compra"
+      subtitle="Impacto en concentración, exposición y correlación antes de comprar de verdad"
+    >
+      <div className="mb-5 flex items-end gap-3">
+        <div className="w-40">
+          <Field label="Monto a invertir (USD)">
+            <Input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              inputMode="decimal"
+            />
+          </Field>
+        </div>
+        <Button onClick={run} disabled={loading}>
+          {loading ? "Simulando…" : "Simular"}
+        </Button>
+      </div>
+
+      {error && <p className="mb-4 text-sm text-loss">{error}</p>}
+
+      {result && (
+        <div className="space-y-5">
+          {result.warnings.length > 0 && (
+            <ul className="rounded-control border border-separator bg-separator/20 p-3 text-xs text-secondary">
+              {result.warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+
+          <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+            <Metric
+              label="Cantidad a comprar"
+              value={result.quantity_added.toLocaleString("en-US", { maximumFractionDigits: 4 })}
+            />
+            <Metric label="Peso resultante" value={formatPercent(result.new_weight)} />
+            <Metric
+              label="Concentración top-3"
+              value={formatPercent(result.top3_after)}
+              sub={
+                <span className={pnlColor(top3Delta)}>
+                  {formatSignedPercent(top3Delta)} vs. hoy
+                </span>
+              }
+            />
+            <Metric
+              label="Herfindahl (HHI)"
+              value={result.herfindahl_after.toFixed(3)}
+              sub={
+                <span className={pnlColor(hhiDelta)}>
+                  {hhiDelta >= 0 ? "+" : ""}
+                  {hhiDelta.toFixed(3)} vs. hoy
+                </span>
+              }
+            />
+          </div>
+
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-secondary">
+              Correlación con la cartera actual
+            </p>
+            {result.correlation_to_portfolio !== null ? (
+              <p className="text-sm text-primary">
+                {result.correlation_to_portfolio.toFixed(2)} —{" "}
+                {Math.abs(result.correlation_to_portfolio) < 0.3
+                  ? "buena diversificación"
+                  : result.correlation_to_portfolio > 0.7
+                    ? "se mueve muy parecido a lo que ya tenés"
+                    : "correlación moderada"}
+              </p>
+            ) : (
+              <p className="text-sm text-secondary">Sin datos suficientes todavía.</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <ExposureShift
+              label="Sector"
+              category={summary?.sector ?? null}
+              before={result.exposure_before.sector}
+              after={result.exposure_after.sector}
+            />
+            <ExposureShift
+              label="País"
+              category={summary?.country ?? null}
+              before={result.exposure_before.country}
+              after={result.exposure_after.country}
+            />
+            <ExposureShift
+              label="Moneda"
+              category={summary?.currency ?? null}
+              before={result.exposure_before.currency}
+              after={result.exposure_after.currency}
+            />
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

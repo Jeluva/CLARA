@@ -117,4 +117,39 @@ def test_correlation_aligns_mismatched_histories(
     assert len(result["matrix"]) == 2
 
 
+def test_simulate_purchase_new_position_raises_concentration(db: Session) -> None:
+    seed_database(db)
+    before = svc.get_risk_metrics(db)
+    result = svc.simulate_purchase(db, "SPY", 5000.0)  # SPY: benchmark, not held
+    assert result.already_held is False
+    assert result.quantity_added > 0
+    assert result.new_weight > 0.0
+    assert result.top3_before == pytest.approx(before.top3_concentration)
+    # Adding a brand-new position dilutes existing concentration.
+    assert result.top3_after < result.top3_before
+    assert result.correlation_to_portfolio is not None
+    assert -1.0 <= result.correlation_to_portfolio <= 1.0
+
+
+def test_simulate_purchase_existing_position_increases_its_weight(db: Session) -> None:
+    seed_database(db)
+    overview = svc.get_portfolio_overview(db)
+    aapl_before = next(p for p in overview.positions if p.ticker == "AAPL")
+    result = svc.simulate_purchase(db, "AAPL", 10000.0)
+    assert result.already_held is True
+    assert result.new_weight > aapl_before.weight
+
+
+def test_simulate_purchase_unknown_ticker_raises(db: Session) -> None:
+    seed_database(db)
+    with pytest.raises(ValueError):
+        svc.simulate_purchase(db, "NOPE", 1000.0)
+
+
+def test_simulate_purchase_rejects_non_positive_amount(db: Session) -> None:
+    seed_database(db)
+    with pytest.raises(ValueError):
+        svc.simulate_purchase(db, "AAPL", 0.0)
+
+
 import pytest  # noqa: E402  (kept at bottom; used by approx above)
