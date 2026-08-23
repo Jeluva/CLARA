@@ -51,6 +51,14 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export function apiDelete(path: string): Promise<void> {
   return request<void>(path, { method: "DELETE" });
 }
@@ -118,18 +126,28 @@ export interface Correlation {
   matrix: number[][];
 }
 
-export const getPortfolio = () => apiGet<PortfolioOverview>("/portfolio");
-export const getMetrics = () => apiGet<RiskMetrics>("/portfolio/metrics");
-export const getExposure = () => apiGet<Exposure>("/portfolio/exposure");
-export const getHistory = () => apiGet<HistoryPoint[]>("/portfolio/history");
+/** Query-string suffix for the active portfolio; omitted -> backend merges
+ * every portfolio ("Todos"). See docs/devlog/BACKLOG.md v3 item 1. */
+function portfolioQS(portfolioId: number | null) {
+  return portfolioId !== null ? `?portfolio_id=${portfolioId}` : "";
+}
+
+export const getPortfolio = (portfolioId: number | null = null) =>
+  apiGet<PortfolioOverview>(`/portfolio${portfolioQS(portfolioId)}`);
+export const getMetrics = (portfolioId: number | null = null) =>
+  apiGet<RiskMetrics>(`/portfolio/metrics${portfolioQS(portfolioId)}`);
+export const getExposure = (portfolioId: number | null = null) =>
+  apiGet<Exposure>(`/portfolio/exposure${portfolioQS(portfolioId)}`);
+export const getHistory = (portfolioId: number | null = null) =>
+  apiGet<HistoryPoint[]>(`/portfolio/history${portfolioQS(portfolioId)}`);
 
 export interface RealizedPoint {
   date: string;
   realized_pnl: number;
 }
 
-export const getRealizedHistory = () =>
-  apiGet<RealizedPoint[]>("/portfolio/realized-history");
+export const getRealizedHistory = (portfolioId: number | null = null) =>
+  apiGet<RealizedPoint[]>(`/portfolio/realized-history${portfolioQS(portfolioId)}`);
 export const getCorrelation = () =>
   apiGet<Correlation>("/research/correlation");
 
@@ -151,8 +169,16 @@ export interface Simulation {
   warnings: string[];
 }
 
-export const simulatePurchase = (ticker: string, amount: number) =>
-  apiPost<Simulation>("/portfolio/simulate", { ticker, amount });
+export const simulatePurchase = (
+  ticker: string,
+  amount: number,
+  portfolioId: number | null = null,
+) =>
+  apiPost<Simulation>("/portfolio/simulate", {
+    ticker,
+    amount,
+    portfolio_id: portfolioId,
+  });
 
 export interface PositionSizeGuide {
   ticker: string;
@@ -172,10 +198,29 @@ export interface PositionSizeGuide {
   warnings: string[];
 }
 
-export const getPositionSizeGuide = (ticker: string, riskBudgetPct: number) =>
+export const getPositionSizeGuide = (
+  ticker: string,
+  riskBudgetPct: number,
+  portfolioId: number | null = null,
+) =>
   apiGet<PositionSizeGuide>(
-    `/portfolio/position-size/${ticker}?risk_budget_pct=${riskBudgetPct}`,
+    `/portfolio/position-size/${ticker}?risk_budget_pct=${riskBudgetPct}` +
+      (portfolioId !== null ? `&portfolio_id=${portfolioId}` : ""),
   );
+
+// --- Portfolios (multi-portfolio switcher) ------------------------------------
+
+export interface Portfolio {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
+export const getPortfolios = () => apiGet<Portfolio[]>("/portfolios");
+export const createPortfolio = (name: string) =>
+  apiPost<Portfolio>("/portfolios", { name });
+export const renamePortfolio = (id: number, name: string) =>
+  apiPatch<Portfolio>(`/portfolios/${id}`, { name });
 
 // --- Data entry --------------------------------------------------------------
 
@@ -201,6 +246,7 @@ export interface AssetCreate {
 export interface PositionFull {
   id: number;
   ticker: string;
+  portfolio_id: number;
   quantity: number;
   avg_cost: number;
   opened_at: string;
@@ -219,9 +265,13 @@ export const createAsset = (body: AssetCreate) =>
   apiPost<Asset>("/assets", body);
 export const deleteAsset = (id: number) => apiDelete(`/assets/${id}`);
 
-export const getPositions = () => apiGet<PositionFull[]>("/positions");
+export const getPositions = (portfolioId?: number | null) =>
+  apiGet<PositionFull[]>(
+    `/positions${portfolioId != null ? `?portfolio_id=${portfolioId}` : ""}`,
+  );
 export const createPosition = (body: {
   ticker: string;
+  portfolio_id: number;
   quantity: number;
   avg_cost: number;
 }) => apiPost<PositionFull>("/positions", body);
@@ -446,8 +496,13 @@ export interface AssetSummary {
   avg_sentiment: number | null;
 }
 
-export const getAssetSummary = (ticker: string) =>
-  apiGet<AssetSummary>(`/assets/${ticker}/summary`);
+export const getAssetSummary = (
+  ticker: string,
+  portfolioId: number | null = null,
+) =>
+  apiGet<AssetSummary>(
+    `/assets/${ticker}/summary${portfolioId !== null ? `?portfolio_id=${portfolioId}` : ""}`,
+  );
 
 export interface ChatTurn {
   role: "user" | "assistant";

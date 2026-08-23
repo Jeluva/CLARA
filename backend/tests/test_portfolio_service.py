@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.analytics.risk import beta
 from app.analytics.returns import daily_returns
+from app.services import crud_service
 from app.services import portfolio_service as svc
 from app.services.market_data import price_series_by_ticker
+from app.storage.models.silver import Portfolio
 from app.storage.seed import SEED_ASSETS, TRADING_DAYS, seed_database
 
 
@@ -197,4 +200,27 @@ def test_position_size_guide_rejects_non_positive_budget(db: Session) -> None:
         svc.get_position_size_guide(db, "AAPL", risk_budget_pct=0.0)
 
 
-import pytest  # noqa: E402  (kept at bottom; used by approx above)
+def test_portfolio_scoping_isolates_positions_and_none_merges(db: Session) -> None:
+    """Two portfolios holding different assets stay isolated when queried by
+    id, and querying with portfolio_id=None merges both -- the "ver todas
+    las posiciones en total" case from docs/devlog/BACKLOG.md v3 item 1."""
+    seed_database(db)
+    p1 = db.execute(select(Portfolio).where(Portfolio.name == "TestPortfolio")).scalar_one()
+    p2 = crud_service.create_portfolio(db, name="Segunda cartera")
+    # SPY is seeded as benchmark-only (holding=None) -- not held by p1, so a
+    # position on it in p2 is unambiguous proof the two stay isolated.
+    crud_service.create_position(
+        db, ticker="SPY", portfolio_id=p2.id, quantity=5, avg_cost=100.0
+    )
+
+    overview_p1 = svc.get_portfolio_overview(db, p1.id)
+    overview_p2 = svc.get_portfolio_overview(db, p2.id)
+    overview_all = svc.get_portfolio_overview(db, None)
+
+    assert "SPY" not in {p.ticker for p in overview_p1.positions}
+    p2_tickers = {p.ticker for p in overview_p2.positions}
+    assert p2_tickers == {"SPY"}
+    assert len(overview_all.positions) == len(overview_p1.positions) + 1
+    assert overview_all.total_value == pytest.approx(
+        overview_p1.total_value + overview_p2.total_value
+    )

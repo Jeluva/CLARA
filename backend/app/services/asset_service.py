@@ -14,7 +14,9 @@ from app.services.portfolio_service import _position_inputs
 from app.storage.models.silver import Asset
 
 
-def get_asset_summary(db: Session, ticker: str) -> dict | None:
+def get_asset_summary(
+    db: Session, ticker: str, portfolio_id: int | None = None
+) -> dict | None:
     ticker = ticker.upper()
     asset = db.execute(
         select(Asset).where(Asset.ticker == ticker)
@@ -47,7 +49,9 @@ def get_asset_summary(db: Session, ticker: str) -> dict | None:
         out["volatility"] = round(volatility(rets), 6)
         out["max_drawdown"] = round(max_drawdown(closes), 6)
 
-    pos = next((p for p in _position_inputs(db) if p.ticker == ticker), None)
+    pos = next(
+        (p for p in _position_inputs(db, portfolio_id) if p.ticker == ticker), None
+    )
     if pos is not None:
         mv = pos.quantity * pos.latest_price
         cost = pos.quantity * pos.avg_cost

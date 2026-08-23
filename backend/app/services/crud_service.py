@@ -11,7 +11,13 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.storage.models.silver import Asset, Position, Transaction, YoutubeChannel
+from app.storage.models.silver import (
+    Asset,
+    Portfolio,
+    Position,
+    Transaction,
+    YoutubeChannel,
+)
 
 
 class NotFoundError(Exception):
@@ -101,15 +107,59 @@ def delete_asset(db: Session, asset_id: int) -> None:
     db.commit()
 
 
+# --- Portfolios ----------------------------------------------------------------
+
+
+def list_portfolios(db: Session) -> list[Portfolio]:
+    return list(
+        db.execute(select(Portfolio).order_by(Portfolio.created_at)).scalars().all()
+    )
+
+
+def create_portfolio(db: Session, *, name: str) -> Portfolio:
+    name = name.strip()
+    if not name:
+        raise ConflictError("El nombre del portfolio no puede estar vacío")
+    existing = db.execute(
+        select(Portfolio).where(Portfolio.name == name)
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise ConflictError(f"Ya existe un portfolio llamado '{name}'")
+    portfolio = Portfolio(name=name)
+    db.add(portfolio)
+    db.commit()
+    db.refresh(portfolio)
+    return portfolio
+
+
+def rename_portfolio(db: Session, portfolio_id: int, *, name: str) -> Portfolio:
+    name = name.strip()
+    if not name:
+        raise ConflictError("El nombre del portfolio no puede estar vacío")
+    portfolio = db.get(Portfolio, portfolio_id)
+    if portfolio is None:
+        raise NotFoundError(f"No existe el portfolio id={portfolio_id}")
+    existing = db.execute(
+        select(Portfolio).where(Portfolio.name == name, Portfolio.id != portfolio_id)
+    ).scalar_one_or_none()
+    if existing is not None:
+        raise ConflictError(f"Ya existe un portfolio llamado '{name}'")
+    portfolio.name = name
+    db.commit()
+    db.refresh(portfolio)
+    return portfolio
+
+
 # --- Positions ---------------------------------------------------------------
 
 
-def list_positions(db: Session) -> list[tuple[Position, Asset]]:
-    rows = db.execute(
-        select(Position, Asset)
-        .join(Asset, Asset.id == Position.asset_id)
-        .order_by(Position.id)
-    ).all()
+def list_positions(
+    db: Session, portfolio_id: int | None = None
+) -> list[tuple[Position, Asset]]:
+    query = select(Position, Asset).join(Asset, Asset.id == Position.asset_id)
+    if portfolio_id is not None:
+        query = query.where(Position.portfolio_id == portfolio_id)
+    rows = db.execute(query.order_by(Position.id)).all()
     return [(p, a) for p, a in rows]
 
 
@@ -117,6 +167,7 @@ def create_position(
     db: Session,
     *,
     ticker: str,
+    portfolio_id: int,
     quantity: float,
     avg_cost: float,
     opened_at: datetime | None = None,
@@ -124,8 +175,11 @@ def create_position(
     if quantity <= 0 or avg_cost <= 0:
         raise ConflictError("quantity y avg_cost deben ser > 0")
     asset = _asset_by_ticker(db, ticker.strip().upper())
+    if db.get(Portfolio, portfolio_id) is None:
+        raise NotFoundError(f"No existe el portfolio id={portfolio_id}")
     position = Position(
         asset_id=asset.id,
+        portfolio_id=portfolio_id,
         quantity=quantity,
         avg_cost=avg_cost,
         opened_at=opened_at or _now(),

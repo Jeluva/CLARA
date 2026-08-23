@@ -10,6 +10,7 @@ from app.storage.models.quality import Quarantine
 from app.storage.models.silver import (
     Asset,
     News,
+    Portfolio,
     Position,
     Price,
     Transaction,
@@ -18,6 +19,7 @@ from app.storage.models.silver import (
 
 __all__ = [
     "Asset",
+    "Portfolio",
     "Position",
     "Transaction",
     "Price",

@@ -62,6 +62,7 @@ class CorrelationOut(BaseModel):
 class SimulationRequest(BaseModel):
     ticker: str = Field(min_length=1)
     amount: float = Field(gt=0)
+    portfolio_id: int | None = None
 
 
 class SimulationOut(BaseModel):
@@ -148,6 +149,7 @@ class AssetOut(BaseModel):
 
 class PositionCreate(BaseModel):
     ticker: str = Field(min_length=1)
+    portfolio_id: int
     quantity: float = Field(gt=0)
     avg_cost: float = Field(gt=0)
     opened_at: datetime | None = None
@@ -156,10 +158,21 @@ class PositionCreate(BaseModel):
 class PositionOutFull(BaseModel):
     id: int
     ticker: str
+    portfolio_id: int
     quantity: float
     avg_cost: float
     opened_at: datetime
     status: str
+
+
+class PortfolioCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class PortfolioOut(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
 
 
 class TransactionCreate(BaseModel):

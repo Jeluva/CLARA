@@ -7,6 +7,7 @@ import {
   ApiError,
   type Asset,
   type Freshness,
+  type Portfolio,
   type PositionFull,
   type YoutubeChannel,
   getAssets,
@@ -22,6 +23,7 @@ import {
   deleteChannel,
   runIngestion,
 } from "@/lib/api";
+import { usePortfolios } from "@/hooks/usePortfolios";
 import { formatCurrency, formatNumber, formatRelativeTime } from "@/lib/format";
 
 type Feedback = { kind: "ok" | "error"; text: string } | null;
@@ -29,6 +31,7 @@ type Feedback = { kind: "ok" | "error"; text: string } | null;
 const ASSET_CLASSES = ["cedear", "equity", "etf", "bond", "fx", "crypto"];
 
 export function DataEntryPage() {
+  const { portfolios } = usePortfolios();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [positions, setPositions] = useState<PositionFull[]>([]);
   const [channels, setChannels] = useState<YoutubeChannel[]>([]);
@@ -113,6 +116,7 @@ export function DataEntryPage() {
 
         <PositionForm
           assets={assets}
+          portfolios={portfolios}
           onCreate={async (body) => {
             try {
               await createPosition(body);
@@ -202,11 +206,12 @@ export function DataEntryPage() {
           <Card title="Posiciones" subtitle={`${positions.length} abiertas`}>
             <ListTable
               empty="Sin posiciones"
-              headers={["Ticker", "Cantidad", "Costo prom.", "", ""]}
+              headers={["Ticker", "Portfolio", "Cantidad", "Costo prom.", "", ""]}
               rows={positions.map((p) => ({
                 id: p.id,
                 cells: [
                   p.ticker,
+                  portfolios.find((pf) => pf.id === p.portfolio_id)?.name ?? "—",
                   formatNumber(p.quantity, 0),
                   formatCurrency(p.avg_cost),
                   "",
@@ -347,25 +352,38 @@ function AssetForm({
 
 function PositionForm({
   assets,
+  portfolios,
   onCreate,
 }: {
   assets: Asset[];
+  portfolios: Portfolio[];
   onCreate: (body: {
     ticker: string;
+    portfolio_id: number;
     quantity: number;
     avg_cost: number;
   }) => Promise<void>;
 }) {
+  const { activeId } = usePortfolios();
   const [ticker, setTicker] = useState("");
+  const [portfolioId, setPortfolioId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [avgCost, setAvgCost] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Default to the currently active portfolio when it's a real one; "Todos"
+  // (activeId=null) has no single portfolio to default a new position into.
+  const defaultPortfolioId =
+    (activeId !== null && portfolios.some((p) => p.id === activeId)
+      ? activeId
+      : portfolios[0]?.id) ?? "";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     await onCreate({
       ticker: ticker || assets[0]?.ticker || "",
+      portfolio_id: Number(portfolioId || defaultPortfolioId),
       quantity: Number(quantity),
       avg_cost: Number(avgCost),
     });
@@ -383,6 +401,19 @@ function PositionForm({
             {assets.map((a) => (
               <option key={a.id} value={a.ticker}>
                 {a.ticker}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Portfolio">
+          <Select
+            value={portfolioId || String(defaultPortfolioId)}
+            onChange={(e) => setPortfolioId(e.target.value)}
+          >
+            {portfolios.length === 0 && <option value="">Sin portfolios</option>}
+            {portfolios.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
               </option>
             ))}
           </Select>
@@ -410,7 +441,10 @@ function PositionForm({
           />
         </Field>
         <div className="col-span-2 mt-1">
-          <Button type="submit" disabled={busy || assets.length === 0}>
+          <Button
+            type="submit"
+            disabled={busy || assets.length === 0 || portfolios.length === 0}
+          >
             {busy ? "Guardando…" : "Crear posición"}
           </Button>
         </div>

@@ -8,6 +8,7 @@ import { Chatbot } from "@/components/Chatbot";
 import { Button, Field, Input, Select, Textarea } from "@/components/Field";
 import { Spinner, ErrorState } from "@/components/Spinner";
 import { useApi, type ApiState } from "@/hooks/useApi";
+import { usePortfolios } from "@/hooks/usePortfolios";
 import {
   ApiError,
   getAssetSummary,
@@ -73,7 +74,7 @@ function sentimentLabel(score: number): SentimentLabel {
 /** Like useApi, but distinguishes "asset never loaded" (404) from a real
  * error, so the page can offer to add it to the watchlist instead of just
  * showing an error box — the whole point of looking up a ticker on a whim. */
-function useAssetSummary(ticker: string) {
+function useAssetSummary(ticker: string, portfolioId: number | null) {
   const [state, setState] = useState<{
     data: AssetSummary | null;
     loading: boolean;
@@ -85,7 +86,7 @@ function useAssetSummary(ticker: string) {
   useEffect(() => {
     let active = true;
     setState({ data: null, loading: true, error: null, notFound: false });
-    getAssetSummary(ticker)
+    getAssetSummary(ticker, portfolioId)
       .then((data) => active && setState({ data, loading: false, error: null, notFound: false }))
       .catch((err: unknown) => {
         if (!active) return;
@@ -103,15 +104,16 @@ function useAssetSummary(ticker: string) {
     return () => {
       active = false;
     };
-  }, [ticker, version]);
+  }, [ticker, portfolioId, version]);
 
   return { ...state, reload: () => setVersion((v) => v + 1) };
 }
 
 export function AssetDetailPage() {
   const { ticker = "" } = useParams();
+  const { activeId } = usePortfolios();
   const [tab, setTab] = useState<Tab>("resumen");
-  const summary = useAssetSummary(ticker);
+  const summary = useAssetSummary(ticker, activeId);
 
   return (
     <div>
@@ -525,6 +527,7 @@ function TesisTab({ ticker }: { ticker: string }) {
  * concentración, exposición y correlación — sin tocar ninguna posición
  * real (docs/devlog/BACKLOG.md, v2 item 5). */
 function SimularTab({ ticker, summary }: { ticker: string; summary: AssetSummary | null }) {
+  const { activeId } = usePortfolios();
   const [amount, setAmount] = useState("1000");
   const [result, setResult] = useState<Simulation | null>(null);
   const [loading, setLoading] = useState(false);
@@ -539,7 +542,7 @@ function SimularTab({ ticker, summary }: { ticker: string; summary: AssetSummary
     setLoading(true);
     setError(null);
     try {
-      setResult(await simulatePurchase(ticker, value));
+      setResult(await simulatePurchase(ticker, value, activeId));
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "No se pudo simular la compra");
       setResult(null);
@@ -659,6 +662,7 @@ function SimularTab({ ticker, summary }: { ticker: string; summary: AssetSummary
  * volatilidad, menos peso para el mismo presupuesto de riesgo
  * (docs/devlog/BACKLOG.md, v2 item 7). */
 function TamanioTab({ ticker }: { ticker: string }) {
+  const { activeId } = usePortfolios();
   const [riskBudgetPct, setRiskBudgetPct] = useState("3");
   const [result, setResult] = useState<PositionSizeGuide | null>(null);
   const [loading, setLoading] = useState(false);
@@ -675,7 +679,7 @@ function TamanioTab({ ticker }: { ticker: string }) {
     setError(null);
     setNoPrice(false);
     try {
-      setResult(await getPositionSizeGuide(ticker, pct / 100));
+      setResult(await getPositionSizeGuide(ticker, pct / 100, activeId));
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         setNoPrice(true);

@@ -101,19 +101,24 @@ class SimulationResult:
     warnings: list[str]
 
 
-def _held_positions(db: Session) -> list[tuple[Asset, float, float]]:
+def _held_positions(
+    db: Session, portfolio_id: int | None = None
+) -> list[tuple[Asset, float, float]]:
     """Aggregate open positions per asset -> (asset, quantity, avg_cost).
 
     Multiple open lots of the same asset are merged with a weighted average cost.
+    `portfolio_id=None` merges every portfolio (the "ver todas las posiciones
+    en total" case from docs/devlog/BACKLOG.md v3 item 1) -- there's no
+    separate aggregation path, it's just the no-filter query.
     """
-    rows = (
-        db.execute(
-            select(Position, Asset)
-            .join(Asset, Asset.id == Position.asset_id)
-            .where(Position.status == "open")
-        )
-        .all()
+    query = (
+        select(Position, Asset)
+        .join(Asset, Asset.id == Position.asset_id)
+        .where(Position.status == "open")
     )
+    if portfolio_id is not None:
+        query = query.where(Position.portfolio_id == portfolio_id)
+    rows = db.execute(query).all()
     agg: dict[int, dict] = {}
     for position, asset in rows:
         bucket = agg.setdefault(
@@ -130,7 +135,9 @@ def _held_positions(db: Session) -> list[tuple[Asset, float, float]]:
     return result
 
 
-def _position_inputs(db: Session) -> list[PositionInput]:
+def _position_inputs(
+    db: Session, portfolio_id: int | None = None
+) -> list[PositionInput]:
     """Position inputs with prices normalized to USD.
 
     `avg_cost`/`latest_price` and downstream market values are always USD, so
@@ -139,7 +146,7 @@ def _position_inputs(db: Session) -> list[PositionInput]:
     `currency` keeps the asset's *native* currency for the exposure breakdown.
     """
     prices = latest_prices(db)
-    held = _held_positions(db)
+    held = _held_positions(db, portfolio_id)
     rate = (
         fx_service.usd_ars_rate()
         if any(asset.currency.upper() == "ARS" for asset, _, _ in held)
@@ -167,9 +174,9 @@ def _position_inputs(db: Session) -> list[PositionInput]:
     return inputs
 
 
-def _portfolio_value_series(db: Session) -> pd.Series:
+def _portfolio_value_series(db: Session, portfolio_id: int | None = None) -> pd.Series:
     """Value series of currently-held assets (excludes the benchmark)."""
-    inputs = _position_inputs(db)
+    inputs = _position_inputs(db, portfolio_id)
     quantities = {p.ticker: p.quantity for p in inputs}
     if not quantities:
         return pd.Series(dtype=float)
@@ -177,15 +184,17 @@ def _portfolio_value_series(db: Session) -> pd.Series:
     return portfolio_value_series(quantities, series)
 
 
-def get_portfolio_overview(db: Session) -> PortfolioOverview:
-    snapshots = build_position_snapshots(_position_inputs(db))
+def get_portfolio_overview(
+    db: Session, portfolio_id: int | None = None
+) -> PortfolioOverview:
+    snapshots = build_position_snapshots(_position_inputs(db, portfolio_id))
     total_value = sum(s.market_value for s in snapshots)
     total_cost = sum(s.cost_basis for s in snapshots)
     total_pnl = total_value - total_cost
     total_pnl_pct = (total_value / total_cost - 1.0) if total_cost else 0.0
 
     # Daily P&L from the last two points of the value series.
-    value_series = _portfolio_value_series(db)
+    value_series = _portfolio_value_series(db, portfolio_id)
     daily_pnl = 0.0
     daily_pnl_pct = 0.0
     if value_series.size >= 2:
@@ -204,8 +213,8 @@ def get_portfolio_overview(db: Session) -> PortfolioOverview:
     )
 
 
-def get_risk_metrics(db: Session) -> RiskMetrics:
-    value_series = _portfolio_value_series(db)
+def get_risk_metrics(db: Session, portfolio_id: int | None = None) -> RiskMetrics:
+    value_series = _portfolio_value_series(db, portfolio_id)
     values = value_series.to_numpy(dtype=float)
     port_returns = daily_returns(values)
 
@@ -221,7 +230,9 @@ def get_risk_metrics(db: Session) -> RiskMetrics:
             b_ret = daily_returns(aligned["bench"].to_numpy(dtype=float))
             beta_value = risk.beta(p_ret, b_ret)
 
-    weights = [s.weight for s in build_position_snapshots(_position_inputs(db))]
+    weights = [
+        s.weight for s in build_position_snapshots(_position_inputs(db, portfolio_id))
+    ]
 
     return RiskMetrics(
         volatility=risk.volatility(port_returns),
@@ -234,13 +245,17 @@ def get_risk_metrics(db: Session) -> RiskMetrics:
     )
 
 
-def get_exposure(db: Session) -> dict[str, dict[str, float]]:
-    return _exposure_snapshot(build_position_snapshots(_position_inputs(db)))
+def get_exposure(
+    db: Session, portfolio_id: int | None = None
+) -> dict[str, dict[str, float]]:
+    return _exposure_snapshot(
+        build_position_snapshots(_position_inputs(db, portfolio_id))
+    )
 
 
-def get_history(db: Session) -> list[dict]:
+def get_history(db: Session, portfolio_id: int | None = None) -> list[dict]:
     """Cumulative-return series of the portfolio vs the benchmark, aligned."""
-    value_series = _portfolio_value_series(db)
+    value_series = _portfolio_value_series(db, portfolio_id)
     if value_series.size < 1:
         return []
 
@@ -272,13 +287,13 @@ def get_history(db: Session) -> list[dict]:
     return out
 
 
-def get_realized_history(db: Session) -> list[dict]:
+def get_realized_history(db: Session, portfolio_id: int | None = None) -> list[dict]:
     """P&L realizado: solo cuenta cada activo desde su opened_at.
 
     A diferencia de get_history (que aplica tenencias actuales a toda la
     historia), esta serie refleja el timing real de las decisiones de entrada.
     """
-    positions = _held_positions(db)
+    positions = _held_positions(db, portfolio_id)
     if not positions:
         return []
 
@@ -289,10 +304,12 @@ def get_realized_history(db: Session) -> list[dict]:
     costs: dict[str, float] = {}
     quantities: dict[str, float] = {}
     for asset, qty, avg_cost in positions:
-        rows = db.execute(
-            select(Position.opened_at)
-            .where(Position.asset_id == asset.id, Position.status == "open")
-        ).scalars().all()
+        query = select(Position.opened_at).where(
+            Position.asset_id == asset.id, Position.status == "open"
+        )
+        if portfolio_id is not None:
+            query = query.where(Position.portfolio_id == portfolio_id)
+        rows = db.execute(query).scalars().all()
         earliest = min(rows) if rows else None
         if earliest is not None:
             opened_dates[asset.ticker] = pd.Timestamp(earliest).normalize()
@@ -338,9 +355,9 @@ def get_realized_history(db: Session) -> list[dict]:
     return out
 
 
-def get_correlation(db: Session) -> dict:
+def get_correlation(db: Session, portfolio_id: int | None = None) -> dict:
     """Correlation matrix of daily returns across held assets (NaN -> 0)."""
-    inputs = _position_inputs(db)
+    inputs = _position_inputs(db, portfolio_id)
     tickers = [p.ticker for p in inputs]
     series = price_series_by_ticker(db, tickers)
     if not series:
@@ -370,7 +387,9 @@ def _exposure_snapshot(snapshots: list[PositionSnapshot]) -> dict[str, dict[str,
     }
 
 
-def simulate_purchase(db: Session, ticker: str, amount: float) -> SimulationResult:
+def simulate_purchase(
+    db: Session, ticker: str, amount: float, portfolio_id: int | None = None
+) -> SimulationResult:
     """"What if I buy this" — impact of a hypothetical purchase on
     concentration, exposure and diversification, without touching any
     position (see docs/devlog/BACKLOG.md, v2 item 5).
@@ -395,7 +414,7 @@ def simulate_purchase(db: Session, ticker: str, amount: float) -> SimulationResu
     price_usd = price / rate if rate else price
     quantity_added = amount / price_usd if price_usd else 0.0
 
-    current_inputs = _position_inputs(db)
+    current_inputs = _position_inputs(db, portfolio_id)
     current_snapshots = build_position_snapshots(current_inputs)
 
     already_held = any(p.ticker == ticker for p in current_inputs)
@@ -496,7 +515,10 @@ def simulate_purchase(db: Session, ticker: str, amount: float) -> SimulationResu
 
 
 def get_position_size_guide(
-    db: Session, ticker: str, risk_budget_pct: float = DEFAULT_RISK_BUDGET_PCT
+    db: Session,
+    ticker: str,
+    risk_budget_pct: float = DEFAULT_RISK_BUDGET_PCT,
+    portfolio_id: int | None = None,
 ) -> PositionSizeGuide:
     """How much of this asset the volatility-scaled risk budget suggests holding
     (see docs/devlog/BACKLOG.md, v2 item 7).
@@ -533,7 +555,7 @@ def get_position_size_guide(
     rate = fx_service.usd_ars_rate() if asset.currency.upper() == "ARS" else None
     current_price = float(closes[-1]) / rate if rate else float(closes[-1])
 
-    overview = get_portfolio_overview(db)
+    overview = get_portfolio_overview(db, portfolio_id)
     total_value = overview.total_value or 0.0
     risk_budget_amount = total_value * risk_budget_pct
 
@@ -563,7 +585,9 @@ def get_position_size_guide(
             "existente contra el cual dimensionar el presupuesto de riesgo."
         )
 
-    held = next((p for p in _position_inputs(db) if p.ticker == ticker), None)
+    held = next(
+        (p for p in _position_inputs(db, portfolio_id) if p.ticker == ticker), None
+    )
     current_amount = held.quantity * held.latest_price if held else 0.0
     current_weight_pct = (current_amount / total_value) if total_value else 0.0
     target_weight_pct = (target_amount / total_value) if total_value else 0.0
