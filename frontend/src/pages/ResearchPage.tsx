@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/Card";
 import { Heatmap } from "@/components/Heatmap";
@@ -229,13 +229,19 @@ function AssetComparator({ tickers }: { tickers: string[] }) {
     return () => { active = false; };
   }, [selected]);
 
-  const METRICS: { key: keyof AssetComparison; label: string; suffix: string; signed?: boolean }[] = [
-    { key: "latest_price", label: "Precio", suffix: "" },
+  const METRICS: { key: keyof AssetComparison; label: string; suffix: string; signed?: boolean; section?: string }[] = [
+    { key: "latest_price", label: "Precio", suffix: "", section: "Precio y riesgo" },
     { key: "total_return", label: "Retorno total", suffix: "%", signed: true },
     { key: "return_1m", label: "Retorno 1M", suffix: "%", signed: true },
     { key: "volatility", label: "Volatilidad", suffix: "%" },
     { key: "max_drawdown", label: "Max Drawdown", suffix: "%" },
     { key: "sharpe", label: "Sharpe", suffix: "" },
+    { key: "pe_ratio", label: "P/E", suffix: "x", section: "Valuación — ¿caro o barato?" },
+    { key: "forward_pe", label: "P/E fwd", suffix: "x" },
+    { key: "pb_ratio", label: "P/B", suffix: "x" },
+    { key: "ev_to_ebitda", label: "EV/EBITDA", suffix: "x" },
+    { key: "dividend_yield", label: "Dividend yield", suffix: "%" },
+    { key: "roe", label: "ROE", suffix: "%" },
   ];
 
   return (
@@ -292,20 +298,32 @@ function AssetComparator({ tickers }: { tickers: string[] }) {
             </thead>
             <tbody>
               {METRICS.map((m) => (
-                <tr key={m.key} className="border-b border-separator/50">
-                  <td className="px-3 py-2.5 font-medium text-primary">{m.label}</td>
-                  {data.map((d) => {
-                    const val = d[m.key] as number | undefined;
-                    if (val == null) return <td key={d.ticker} className="px-3 py-2.5 text-right text-secondary">—</td>;
-                    const color = m.signed ? pnlColor(val) : "text-primary";
-                    const sign = m.signed && val > 0 ? "+" : "";
-                    return (
-                      <td key={d.ticker} className={`tabnum px-3 py-2.5 text-right ${color}`}>
-                        {sign}{val.toFixed(2)}{m.suffix}
+                <Fragment key={m.key}>
+                  {m.section && (
+                    <tr key={`${m.key}-section`}>
+                      <td
+                        colSpan={data.length + 1}
+                        className="px-3 pb-1.5 pt-4 text-xs font-medium uppercase tracking-wide text-secondary first:pt-0"
+                      >
+                        {m.section}
                       </td>
-                    );
-                  })}
-                </tr>
+                    </tr>
+                  )}
+                  <tr key={m.key} className="border-b border-separator/50">
+                    <td className="px-3 py-2.5 font-medium text-primary">{m.label}</td>
+                    {data.map((d) => {
+                      const val = d[m.key] as number | undefined;
+                      if (val == null) return <td key={d.ticker} className="px-3 py-2.5 text-right text-secondary">—</td>;
+                      const color = m.signed ? pnlColor(val) : "text-primary";
+                      const sign = m.signed && val > 0 ? "+" : "";
+                      return (
+                        <td key={d.ticker} className={`tabnum px-3 py-2.5 text-right ${color}`}>
+                          {sign}{val.toFixed(2)}{m.suffix}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </Fragment>
               ))}
             </tbody>
           </table>
