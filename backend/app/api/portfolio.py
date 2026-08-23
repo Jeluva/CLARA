@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
     ExposureOut,
     HistoryPoint,
     PortfolioOverviewOut,
+    PositionSizeOut,
     RiskMetricsOut,
     SimulationOut,
     SimulationRequest,
@@ -69,3 +70,18 @@ def simulate(body: SimulationRequest, db: Session = Depends(get_db)) -> Simulati
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return SimulationOut(**asdict(result))
+
+
+@router.get("/position-size/{ticker}", response_model=PositionSizeOut)
+def position_size(
+    ticker: str,
+    risk_budget_pct: float = Query(default=svc.DEFAULT_RISK_BUDGET_PCT, gt=0, le=1),
+    db: Session = Depends(get_db),
+) -> PositionSizeOut:
+    """Guía de tamaño de posición: cuánto sugiere tener en este activo un
+    presupuesto de riesgo escalado por su volatilidad anualizada."""
+    try:
+        result = svc.get_position_size_guide(db, ticker, risk_budget_pct)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return PositionSizeOut(**asdict(result))

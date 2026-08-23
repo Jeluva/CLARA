@@ -154,6 +154,29 @@ export interface Simulation {
 export const simulatePurchase = (ticker: string, amount: number) =>
   apiPost<Simulation>("/portfolio/simulate", { ticker, amount });
 
+export interface PositionSizeGuide {
+  ticker: string;
+  current_price: number;
+  volatility: number;
+  risk_budget_pct: number;
+  risk_budget_amount: number;
+  portfolio_total_value: number;
+  target_amount: number;
+  target_weight_pct: number;
+  current_amount: number;
+  current_weight_pct: number;
+  delta_amount: number;
+  delta_quantity: number;
+  capped: boolean;
+  max_weight_cap: number;
+  warnings: string[];
+}
+
+export const getPositionSizeGuide = (ticker: string, riskBudgetPct: number) =>
+  apiGet<PositionSizeGuide>(
+    `/portfolio/position-size/${ticker}?risk_budget_pct=${riskBudgetPct}`,
+  );
+
 // --- Data entry --------------------------------------------------------------
 
 export interface Asset {

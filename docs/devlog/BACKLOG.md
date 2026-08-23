@@ -178,8 +178,32 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
       status `objetivo_alcanzado` cuando el target queda por debajo del
       precio actual, `stop_tocado` cuando el stop queda por encima, y delete
       funcionando. 10 tests nuevos en `test_thesis_service.py`.
-- [ ] 7. **Guía de tamaño de posición** según volatilidad del activo y
-      presupuesto de riesgo de la cartera.
+- [x] 7. **Guía de tamaño de posición.** Hecho:
+      `portfolio_service.get_position_size_guide(db, ticker, risk_budget_pct)`
+      — regla de tamaño escalado por volatilidad: monto sugerido = (valor de
+      cartera × presupuesto de riesgo) ÷ volatilidad anualizada del activo, así
+      un activo más volátil recibe menos peso para el mismo presupuesto de
+      riesgo. `risk_budget_pct` son unidades de volatilidad anualizada (no la
+      convención de distancia al stop de `theses.stop_loss`); default 3%,
+      calibrado a mano contra el seed (AAPL ≈11%, NVDA ≈6%, KO ≈18% de peso
+      sugerido — rango single-digit/low-teens esperado, no 1-2% aplastado).
+      Tope duro `MAX_POSITION_WEIGHT=25%` para que un activo de vol casi nula
+      (bono) no se sugiera concentrado. Normaliza a USD igual que
+      `simulate_purchase` (divide por `fx_service.usd_ars_rate()` para
+      activos ARS) — cubierto con test dedicado sobre GGAL, no solo un ticker
+      USD. Nuevo endpoint `GET /api/portfolio/position-size/{ticker}?risk_budget_pct=`
+      (`Query(gt=0, le=1)`), 404 si no hay precio para calcular volatilidad.
+      Pestaña nueva "Tamaño de posición" en `AssetDetailPage`: input de
+      presupuesto (%) + botón, card con volatilidad, tamaño sugerido (monto y
+      % de cartera, con aviso si pegó en el tope), posición actual, y el
+      delta ("podrías sumar" / "por encima de lo sugerido" si ya se pasó).
+      Sin precio todavía (los bonos soberanos AR, ítem 1) muestra un mensaje
+      claro en vez de un error. 5 tests nuevos en `test_portfolio_service.py`
+      (escala inversa a volatilidad, normalización ARS, tope de
+      concentración, ticker inexistente, presupuesto ≤0). Verificado en vivo
+      contra el seed real (no mock): valores de peso sugerido en el rango
+      esperado para AAPL/NVDA/KO/GGAL/AL30, tope funcionando. `tsc --noEmit`,
+      build de producción y vitest en verde.
 - [ ] 8. **Alertas** (precio, sentimiento, valuación) en vez de depender de
       entrar a mirar manualmente.
 - [ ] 9. **Indicador de frescura de datos** en la UI: cuándo se actualizó
