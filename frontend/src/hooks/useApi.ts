@@ -4,18 +4,21 @@ export interface ApiState<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
+  reload: () => void;
 }
 
 /**
  * Fetch-on-mount hook with loading/error state. `fetcher` is expected to be a
  * stable reference (module-level API function), so deps default to empty.
+ * `reload()` re-runs it — handy after a mutation the page just made.
  */
 export function useApi<T>(fetcher: () => Promise<T>): ApiState<T> {
-  const [state, setState] = useState<ApiState<T>>({
-    data: null,
-    loading: true,
-    error: null,
-  });
+  const [state, setState] = useState<{
+    data: T | null;
+    loading: boolean;
+    error: string | null;
+  }>({ data: null, loading: true, error: null });
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -36,7 +39,7 @@ export function useApi<T>(fetcher: () => Promise<T>): ApiState<T> {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [version]);
 
-  return state;
+  return { ...state, reload: () => setVersion((v) => v + 1) };
 }

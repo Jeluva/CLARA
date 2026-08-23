@@ -4,6 +4,7 @@ import { PortfolioPage } from "@/pages/PortfolioPage";
 import { NewsPage } from "@/pages/NewsPage";
 import { ResearchPage } from "@/pages/ResearchPage";
 import { MacroPage } from "@/pages/MacroPage";
+import { ScreenerPage } from "@/pages/ScreenerPage";
 import { DataEntryPage } from "@/pages/DataEntryPage";
 import { AssetDetailPage } from "@/pages/AssetDetailPage";
 
@@ -18,6 +19,7 @@ export default function App() {
             <Route path="/noticias" element={<NewsPage />} />
             <Route path="/research" element={<ResearchPage />} />
             <Route path="/macro" element={<MacroPage />} />
+            <Route path="/screener" element={<ScreenerPage />} />
             <Route path="/datos" element={<DataEntryPage />} />
             <Route path="/activo/:ticker" element={<AssetDetailPage />} />
           </Routes>

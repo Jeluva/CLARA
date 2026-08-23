@@ -6,8 +6,11 @@ import App from "@/App";
 beforeEach(() => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(() =>
-      Promise.resolve({
+    vi.fn((url: string) => {
+      if (url.endsWith("/assets") || url.includes("/research/screener")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      return Promise.resolve({
         ok: true,
         json: () =>
           Promise.resolve({
@@ -25,8 +28,8 @@ beforeEach(() => {
             tickers: [],
             matrix: [],
           }),
-      }),
-    ),
+      });
+    }),
   );
 });
 
@@ -61,6 +64,17 @@ describe("routing", () => {
     );
     expect(
       screen.getByRole("heading", { name: "Macro", level: 1 }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders Screener page at /screener", () => {
+    render(
+      <MemoryRouter initialEntries={["/screener"]}>
+        <App />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("heading", { name: "Screener", level: 1 }),
     ).toBeInTheDocument();
   });
 

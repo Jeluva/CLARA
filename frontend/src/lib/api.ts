@@ -304,6 +304,36 @@ export const compareAssets = (tickers: string[]) =>
   apiGet<AssetComparison[]>(`/research/compare?tickers=${tickers.join(",")}`);
 export const getMacro = () => apiGet<MacroCard[]>("/macro");
 
+export interface ScreenerRow {
+  ticker: string;
+  name: string;
+  asset_class: string;
+  sector: string;
+  country: string;
+  currency: string;
+  latest_price: number | null;
+  return_1m: number | null;
+  rsi14: number | null;
+  trend: "alcista" | "bajista" | null;
+  pe_ratio: number | null;
+  forward_pe: number | null;
+  pb_ratio: number | null;
+  dividend_yield: number | null;
+  revenue_growth: number | null;
+  roe: number | null;
+}
+
+export const getScreener = () => apiGet<ScreenerRow[]>("/research/screener");
+
+export interface SeedResult {
+  created: number;
+  already_tracked: number;
+  message: string;
+}
+
+export const seedScreenerUniverse = () =>
+  apiPost<SeedResult>("/screener/seed", {});
+
 export interface Fundamentals {
   ticker: string;
   source: string;

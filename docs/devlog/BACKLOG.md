@@ -113,10 +113,22 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
       los assets, así los que solo están en watchlist también se pueden
       analizar ahí. La matriz de correlación en sí queda igual (tiene
       sentido que sea solo de lo que se tiene, mide diversificación real).
-- [ ] 3. **Screener tipo finviz.** Filtrar un universo de tickers por
-      fundamentals + técnicos (P/E bajo, momentum positivo, sector, etc.)
-      para generar ideas de candidatos, no solo analizar lo que ya se eligió
-      de antemano.
+- [x] 3. **Screener tipo finviz.** Hecho: universo curado de 28 tickers
+      líderes (`app/ingestion/universe.py` — CEDEARs de EE. UU. como
+      "cedear", Merval como "equity", soberanos AR como "bond") con endpoint
+      `POST /api/screener/seed` que crea los que falten (idempotente, no
+      pisa los que ya existen) + `GET /api/research/screener`
+      (`screener_service.get_screener`) que devuelve fundamentals +
+      técnicos (retorno 1M, RSI14, tendencia SMA20/50) por activo. Página
+      nueva "Screener" en el nav: tabla ordenable por columna, filtros de
+      texto/sector/clase/P·E máximo/momentum positivo, botón "Cargar
+      universo ampliado" que siembra + dispara ingestión de precios y
+      fundamentals. Probado en vivo contra el backend real (no mock): 20
+      activos nuevos creados, 4490 precios y 28 fundamentals ingestados sin
+      errores. Confirma el gap ya documentado en el ítem 1: los 4 bonos
+      soberanos (AL30/GD30/AL35/AE38) devuelven precio y fundamentals
+      `null` en yfinance — el screener lo maneja bien (celda "—"), pero
+      cubrir bonos de verdad sigue pendiente de otra fuente de datos.
 - [ ] 4. **Comparador con valuación.** Sumar fundamentals/valuación al
       comparador de Research (hoy solo compara retorno/vol/drawdown/Sharpe
       entre tickers, sin decir si alguno está caro o barato).

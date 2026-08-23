@@ -24,6 +24,7 @@ from app.ingestion.transcripts import (
     ingest_external_transcripts,
     run_transcript_ingestion,
 )
+from app.ingestion.universe import SCREENER_UNIVERSE
 from app.services import asset_service
 from app.services import crud_service as crud
 from app.storage.database import get_db
@@ -55,6 +56,19 @@ def asset_summary(ticker: str, db: Session = Depends(get_db)) -> dict:
     if summary is None:
         raise HTTPException(status_code=404, detail=f"No existe el activo {ticker}")
     return summary
+
+
+@router.post("/api/screener/seed")
+def seed_screener_universe(db: Session = Depends(get_db)) -> dict:
+    """Load the curated screener universe: creates any of its ~30 tickers
+    that aren't already tracked (existing assets are left untouched). Run
+    price/fundamentals ingestion afterwards to fill in the new rows."""
+    created = crud.seed_assets(db, SCREENER_UNIVERSE)
+    return {
+        "created": created,
+        "already_tracked": len(SCREENER_UNIVERSE) - created,
+        "message": f"{created} activos nuevos agregados al universo del screener.",
+    }
 
 
 @router.delete("/api/assets/{asset_id}", status_code=204, response_class=Response)

@@ -32,6 +32,12 @@ export const NAV_TABS: NavTab[] = [
     icon: "M12 3a9 9 0 100 18 9 9 0 000-18zm0 0v18m-9-9h18",
   },
   {
+    path: "/screener",
+    label: "Screener",
+    question: "¿Qué candidatos hay más allá de lo que ya tengo cargado?",
+    icon: "M10 4a6 6 0 100 12 6 6 0 000-12zm8 16l-4.35-4.35",
+  },
+  {
     path: "/datos",
     label: "Ingreso de datos",
     question: "¿Cómo cargo y edito posiciones, transacciones y fuentes?",
