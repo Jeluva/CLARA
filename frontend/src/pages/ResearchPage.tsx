@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/Card";
 import { Heatmap } from "@/components/Heatmap";
 import { TechnicalChart } from "@/components/TechnicalChart";
+import { Select, Input } from "@/components/Field";
 import { Spinner, ErrorState } from "@/components/Spinner";
 import { useApi } from "@/hooks/useApi";
 import {
@@ -67,20 +68,12 @@ export function ResearchPage() {
         title="Indicadores técnicos"
         subtitle="Precio, medias móviles (20/50), RSI(14) y MACD"
         action={
-          <div className="flex flex-wrap gap-1.5">
-            {tickers.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTicker(t)}
-                className={`rounded-control border px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
-                  ticker === t
-                    ? "border-accent bg-accent/10 text-primary"
-                    : "border-separator text-secondary hover:bg-separator/40"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
+          <div className="w-36">
+            <Select value={ticker ?? ""} onChange={(e) => setTicker(e.target.value)}>
+              {tickers.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </Select>
           </div>
         }
       >
@@ -210,6 +203,9 @@ function AssetComparator({ tickers }: { tickers: string[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [data, setData] = useState<AssetComparison[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("");
+
+  const visible = tickers.filter((t) => t.includes(filter.trim().toUpperCase()));
 
   function toggle(t: string) {
     setSelected((prev) => {
@@ -248,8 +244,17 @@ function AssetComparator({ tickers }: { tickers: string[] }) {
       subtitle="Seleccioná 2 o más activos para comparar métricas"
       className="mt-5"
     >
-      <div className="mb-4 flex flex-wrap gap-1.5">
-        {tickers.map((t) => (
+      {tickers.length > 8 && (
+        <div className="mb-3 w-48">
+          <Input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filtrar ticker…"
+          />
+        </div>
+      )}
+      <div className="mb-4 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+        {visible.map((t) => (
           <button
             key={t}
             onClick={() => toggle(t)}
