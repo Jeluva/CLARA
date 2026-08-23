@@ -72,6 +72,27 @@ def create_asset(
     return asset
 
 
+def seed_assets(db: Session, entries: list[dict]) -> int:
+    """Create any of `entries` not already loaded (matched by ticker).
+    Existing assets are left untouched. Returns how many were created."""
+    created = 0
+    for entry in entries:
+        try:
+            create_asset(
+                db,
+                ticker=entry["ticker"],
+                name=entry["name"],
+                asset_class=entry["asset_class"],
+                sector=entry.get("sector", "Unknown"),
+                country=entry.get("country", "Unknown"),
+                currency=entry.get("currency", "USD"),
+            )
+            created += 1
+        except ConflictError:
+            continue
+    return created
+
+
 def delete_asset(db: Session, asset_id: int) -> None:
     asset = db.get(Asset, asset_id)
     if asset is None:
