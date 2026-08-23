@@ -305,6 +305,7 @@ export const deleteChannel = (id: number) => apiDelete(`/youtube/channels/${id}`
 
 export interface TransactionCreate {
   ticker: string;
+  portfolio_id: number;
   type: "buy" | "sell";
   quantity: number;
   price: number;

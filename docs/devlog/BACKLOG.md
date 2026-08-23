@@ -313,6 +313,83 @@ Con los ítems 7-9 tildados, la v2 queda completa.
       migrada (violación NOT NULL). Reiniciarlo para que cargue el
       código nuevo.
 
+## v4 — cerrar el gap de renta fija + consistencia multi-portfolio
+
+Diagnóstico (2026-08-23): con v3 cerrada, CLARA cubre bien acciones/CEDEARs
+(fundamentals, screener, comparador, simulación, tesis, tamaño de posición,
+alertas) pero tiene tres huecos concretos que quedaron documentados o
+expuestos por el trabajo reciente:
+
+1. **Bonos soberanos AR sin dato real.** Flagged dos veces (v2 ítem 1, v2
+   ítem 3): AL30/GD30/AL35/AE38 devuelven `null` en precio y fundamentals
+   porque `yfinance` no cubre renta fija argentina. Ya hay investigación de
+   fuentes hecha (bonistas.com — TIR/TEM/TNA/duration modificada/paridad,
+   HTML server-rendered, sin login, el mejor para soberanos). Es el gap más
+   repetido y el que más rompe la promesa de v2 ("acción **o bono**").
+2. **`Transaction` sin `portfolio_id`.** La migración de v3 lo dejó afuera
+   a propósito ("nada la lee todavía"), pero ahora que multi-portfolio es
+   real, el historial de transacciones no se puede filtrar ni atribuir a
+   un portfolio específico — inconsistente con posiciones, que sí lo tienen.
+3. **No hay una vista de arranque.** Alertas, tesis en curso y frescura de
+   datos viven cada una en su pestaña; para saber "¿qué necesita mi
+   atención hoy?" hay que entrar a las tres. Encaja con el espíritu de v2
+   (mesa de decisión, no solo tracker).
+
+- [ ] 1. **Bonos soberanos reales vía bonistas.com.** Scraper (Playwright,
+      mismo patrón que el resto de la ingestión) contra la tabla de
+      soberanos de bonistas.com: TIR, TEM, TNA, duration modificada,
+      paridad, próximo cupón. Tabla silver nueva (o extensión de
+      `fundamentals` con columnas opcionales — decidir al implementar cuál
+      ensucia menos el esquema) para los 4 bonos ya en el universo
+      (AL30/GD30/AL35/AE38). Quality check dedicado (TIR/duration
+      razonables, no negativos). Reemplazar el "—" del screener/
+      fundamentals por el dato real para esos 4 tickers. Confirmar en vivo
+      con Chrome la estructura HTML actual antes de escribir el parser (la
+      investigación de v2 es de hace semanas, el sitio puede haber
+      cambiado). ONs (PPI) y provinciales (Puente) quedan fuera de esta
+      vuelta — solo soberanos, que es lo que ya está en el universo.
+- [x] 2. **`portfolio_id` en `Transaction`.** Hecho: migración Alembic
+      (mismo patrón que v3: columna nullable, backfill, `NOT NULL`
+      después) — si todas las posiciones existentes de un activo
+      pertenecen a un solo portfolio se atribuye ahí; si es ambiguo (o no
+      hay posición) cae al portfolio más viejo. `crud_service.create_transaction`
+      ahora exige `portfolio_id` y 404 si el portfolio no existe (mismo
+      patrón que `create_position`). `TransactionCreate` lo pide en el
+      body. `seed.py` tenía el mismo bug que motivó este ítem: creaba la
+      posición con `portfolio_id` pero la transacción de apertura
+      emparejada sin él — arreglado de paso (si no, el seed rompía con
+      `IntegrityError` apenas se corría la migración). Frontend:
+      `TransactionForm` en Ingreso de datos gana el mismo selector de
+      portfolio que `PositionForm`, mismo default (portfolio activo, o el
+      primero si está en "Todos"). No hay `GET /api/transactions` todavía
+      (nada lo consume — ni la UI ni ningún service lee `Transaction`),
+      así que no hay filtro por portfolio que enchufar del lado de
+      lectura; el valor de este ítem es la consistencia del dato hacia
+      adelante. 4 tests nuevos en `test_crud_service.py` (asset
+      inexistente, portfolio inexistente, cantidad/precio ≤0, alta
+      correcta). Verificado en vivo contra el backend real: migración
+      con downgrade+upgrade en la misma corrida, servidor levantado en el
+      puerto 8001 (no pisar el proceso preexistente del 8000, que había
+      quedado con código viejo de antes de v3 — ver nota abajo), POST
+      sin `portfolio_id` → 422, con portfolio inexistente → 404, alta
+      válida → 201. 155 tests backend + 23 frontend en verde, `tsc
+      --noEmit` y build de producción limpios.
+
+      **Nota operativa:** el proceso de `uvicorn` en el puerto 8000
+      seguía sirviendo código de antes del commit de v3 (le faltaba
+      `/api/portfolios`) y no se pudo identificar/matar de forma
+      confiable desde esta sesión — `netstat`/`Get-NetTCPConnection`
+      reportaban un PID dueño del socket que `Get-Process`/`taskkill`
+      decían que no existía. Si alguien tiene una terminal propia con
+      ese proceso, reiniciarlo a mano; si no, probablemente sea un
+      proceso zombie de Windows que un reinicio de la máquina resuelve.
+- [ ] 3. **Resumen ejecutivo.** Nueva vista (o sección en Portfolio) que
+      junta: alertas disparadas, tesis con status `objetivo_alcanzado` o
+      `stop_tocado`, y fuentes con frescura `nunca`/`corrió pero no
+      promovió nada` — todo ya calculado por los servicios existentes
+      (`alert_service`, `thesis_service`, `freshness_service`), esto es
+      composición de UI, no cálculo nuevo.
+
 ## Reglas del ciclo (para no gastar tokens de más)
 
 - Al empezar una tarea: leer SOLO los archivos que esa tarea menciona. No

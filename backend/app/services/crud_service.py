@@ -206,6 +206,7 @@ def create_transaction(
     db: Session,
     *,
     ticker: str,
+    portfolio_id: int,
     type: str,
     quantity: float,
     price: float,
@@ -215,8 +216,11 @@ def create_transaction(
     if quantity <= 0 or price <= 0:
         raise ConflictError("quantity y price deben ser > 0")
     asset = _asset_by_ticker(db, ticker.strip().upper())
+    if db.get(Portfolio, portfolio_id) is None:
+        raise NotFoundError(f"No existe el portfolio id={portfolio_id}")
     tx = Transaction(
         asset_id=asset.id,
+        portfolio_id=portfolio_id,
         type=type,
         quantity=quantity,
         price=price,

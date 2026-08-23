@@ -137,6 +137,53 @@ def test_delete_missing_asset_raises(db: Session) -> None:
         crud.delete_asset(db, 999)
 
 
+# --- Transactions ----------------------------------------------------------
+
+
+def test_create_transaction_requires_existing_asset(db: Session) -> None:
+    portfolio = crud.create_portfolio(db, name="Test")
+    with pytest.raises(crud.NotFoundError):
+        crud.create_transaction(
+            db, ticker="ZZZZ", portfolio_id=portfolio.id, type="buy", quantity=10, price=100
+        )
+
+
+def test_create_transaction_requires_existing_portfolio(db: Session) -> None:
+    crud.create_asset(
+        db, ticker="AAPL", name="Apple", asset_class="cedear",
+        sector="Tech", country="USA", currency="USD",
+    )
+    with pytest.raises(crud.NotFoundError):
+        crud.create_transaction(
+            db, ticker="AAPL", portfolio_id=999, type="buy", quantity=10, price=150
+        )
+
+
+def test_create_transaction_rejects_non_positive(db: Session) -> None:
+    crud.create_asset(
+        db, ticker="AAPL", name="Apple", asset_class="cedear",
+        sector="Tech", country="USA", currency="USD",
+    )
+    portfolio = crud.create_portfolio(db, name="Test")
+    with pytest.raises(crud.ConflictError):
+        crud.create_transaction(
+            db, ticker="AAPL", portfolio_id=portfolio.id, type="buy", quantity=0, price=150
+        )
+
+
+def test_create_transaction_links_to_portfolio(db: Session) -> None:
+    crud.create_asset(
+        db, ticker="AAPL", name="Apple", asset_class="cedear",
+        sector="Tech", country="USA", currency="USD",
+    )
+    portfolio = crud.create_portfolio(db, name="Test")
+    tx = crud.create_transaction(
+        db, ticker="AAPL", portfolio_id=portfolio.id, type="buy", quantity=10, price=150
+    )
+    assert tx.portfolio_id == portfolio.id
+    assert tx.type == "buy"
+
+
 # --- YouTube channels ----------------------------------------------------------
 
 

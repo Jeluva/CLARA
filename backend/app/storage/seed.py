@@ -169,6 +169,7 @@ def seed_database(db: Session) -> dict[str, int]:
                 db.add(
                     Transaction(
                         asset_id=asset.id,
+                        portfolio_id=portfolio.id,
                         type="buy",
                         quantity=qty,
                         price=avg_cost,

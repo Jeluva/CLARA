@@ -177,6 +177,7 @@ class PortfolioOut(BaseModel):
 
 class TransactionCreate(BaseModel):
     ticker: str = Field(min_length=1)
+    portfolio_id: int
     type: str = Field(pattern="^(buy|sell)$")
     quantity: float = Field(gt=0)
     price: float = Field(gt=0)
