@@ -213,6 +213,13 @@ class AlertOut(BaseModel):
     status: str
 
 
+class FreshnessOut(BaseModel):
+    source: str
+    label: str
+    last_success_at: str | None
+    last_attempt_at: str | None
+
+
 class IngestionResult(BaseModel):
     source: str
     promoted: int

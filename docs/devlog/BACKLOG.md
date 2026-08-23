@@ -227,9 +227,28 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
       sentimiento con umbral no alcanzado queda "en seguimiento",
       `only_triggered` filtra bien. `tsc --noEmit`, build de producción y
       vitest en verde.
-- [ ] 9. **Indicador de frescura de datos** en la UI: cuándo se actualizó
-      por última vez cada fuente (relevante por los workarounds de
-      yfinance/proxy ya documentados en fase-12).
+- [x] 9. **Indicador de frescura de datos.** Hecho: `freshness_service.get_freshness`
+      lee `bronze_records.fetched_at` (la única marca de tiempo que escribe
+      *todo* ingestor, sin importar el esquema silver de cada fuente —
+      `transcripts` ni siquiera tiene su propio `ingested_at`) y agrupa por
+      `source_table` para dar, por cada una de las 4 fuentes
+      (`prices`/`news`/`transcripts`/`fundamentals`), cuándo promovió datos
+      por última vez (`last_success_at`) y cuándo se intentó por última vez
+      en general (`last_attempt_at`) — si difieren, la corrida más reciente
+      no promovió nada nuevo (relevante por los workarounds de yfinance/
+      YouTube de fase-12). Endpoint nuevo `GET /api/ingestion/freshness`.
+      En Ingreso de datos, debajo de los botones "Ingestar…", una lista con
+      punto verde/gris/rojo (ok / nunca / corrió pero no promovió nada) y
+      tiempo relativo ("hace 3 h"); se refresca sola después de cada
+      ingestión forzada, sin recargar la página. 4 tests nuevos en
+      `test_freshness_service.py`. Verificado en vivo contra un seed real
+      (sqlite + `alembic upgrade head` + `seed_cli`, no mock de test):
+      precios/noticias/transcripciones muestran su timestamp real de la
+      corrida del seed, fundamentals (nunca ingerido en el seed) da `None`
+      en ambos campos como se esperaba. `tsc --noEmit`, build de producción
+      y vitest en verde; 147 tests backend en verde.
+
+Con los ítems 7-9 tildados, la v2 queda completa.
 
 ## Reglas del ciclo (para no gastar tokens de más)
 

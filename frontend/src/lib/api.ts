@@ -230,6 +230,15 @@ export const deletePosition = (id: number) => apiDelete(`/positions/${id}`);
 export const runIngestion = (source: string) =>
   apiPost<IngestionResult>(`/ingestion/run?source=${source}`, {});
 
+export interface Freshness {
+  source: string;
+  label: string;
+  last_success_at: string | null;
+  last_attempt_at: string | null;
+}
+
+export const getFreshness = () => apiGet<Freshness[]>("/ingestion/freshness");
+
 export interface YoutubeChannel {
   id: number;
   channel_id: string;

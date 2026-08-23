@@ -12,6 +12,7 @@ from app.api.schemas import (
     AssetOut,
     ChannelCreate,
     ChannelOut,
+    FreshnessOut,
     IngestionResult,
     PositionCreate,
     PositionOutFull,
@@ -32,6 +33,7 @@ from app.ingestion.universe import SCREENER_UNIVERSE
 from app.services import alert_service
 from app.services import asset_service
 from app.services import crud_service as crud
+from app.services import freshness_service
 from app.services import thesis_service
 from app.storage.database import get_db
 
@@ -226,6 +228,15 @@ def delete_alert(alert_id: int, db: Session = Depends(get_db)) -> Response:
 
 
 # --- Ingestion ---------------------------------------------------------------
+
+
+@router.get("/api/ingestion/freshness", response_model=list[FreshnessOut])
+def ingestion_freshness(db: Session = Depends(get_db)) -> list[FreshnessOut]:
+    """Cuándo se actualizó por última vez cada fuente (ver
+    docs/devlog/BACKLOG.md, v2 item 9) -- relevante por los workarounds de
+    yfinance/proxy ya documentados en fase-12: una corrida puede "andar" sin
+    haber promovido nada nuevo."""
+    return [FreshnessOut(**f) for f in freshness_service.get_freshness(db)]
 
 
 _INGESTORS = {
