@@ -486,3 +486,39 @@ export const getTheses = (ticker?: string) =>
 export const createThesis = (body: ThesisCreate) =>
   apiPost<Thesis>("/theses", body);
 export const deleteThesis = (id: number) => apiDelete(`/theses/${id}`);
+
+// --- Alerts --------------------------------------------------------------------
+
+export type AlertMetric = "price" | "sentiment" | "pe_ratio";
+export type AlertCondition = "above" | "below";
+export type AlertStatus = "disparada" | "en_seguimiento" | "sin_dato" | "inactiva";
+
+export interface Alert {
+  id: number;
+  ticker: string;
+  metric: AlertMetric;
+  condition: AlertCondition;
+  threshold: number;
+  active: boolean;
+  created_at: string;
+  current_value: number | null;
+  triggered: boolean;
+  status: AlertStatus;
+}
+
+export interface AlertCreate {
+  ticker: string;
+  metric: AlertMetric;
+  condition: AlertCondition;
+  threshold: number;
+}
+
+export const getAlerts = (params?: { ticker?: string; onlyTriggered?: boolean }) => {
+  const qs = new URLSearchParams();
+  if (params?.ticker) qs.set("ticker", params.ticker);
+  if (params?.onlyTriggered) qs.set("only_triggered", "true");
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return apiGet<Alert[]>(`/alerts${suffix}`);
+};
+export const createAlert = (body: AlertCreate) => apiPost<Alert>("/alerts", body);
+export const deleteAlert = (id: number) => apiDelete(`/alerts/${id}`);

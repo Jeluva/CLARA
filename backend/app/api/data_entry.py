@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
+    AlertCreate,
+    AlertOut,
     AssetCreate,
     AssetOut,
     ChannelCreate,
@@ -27,6 +29,7 @@ from app.ingestion.transcripts import (
     run_transcript_ingestion,
 )
 from app.ingestion.universe import SCREENER_UNIVERSE
+from app.services import alert_service
 from app.services import asset_service
 from app.services import crud_service as crud
 from app.services import thesis_service
@@ -180,6 +183,43 @@ def create_thesis(body: ThesisCreate, db: Session = Depends(get_db)) -> ThesisOu
 def delete_thesis(thesis_id: int, db: Session = Depends(get_db)) -> Response:
     try:
         thesis_service.delete_thesis(db, thesis_id)
+    except crud.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
+# --- Alerts --------------------------------------------------------------------
+
+
+@router.get("/api/alerts", response_model=list[AlertOut])
+def list_alerts(
+    ticker: str | None = None,
+    only_triggered: bool = False,
+    db: Session = Depends(get_db),
+) -> list[AlertOut]:
+    """Reglas de alerta (precio, sentimiento, valuación) con su estado
+    evaluado en vivo -- reemplaza tener que entrar a mirar cada activo a
+    mano para saber si algo cambió."""
+    return [
+        AlertOut(**a) for a in alert_service.list_alerts(db, ticker, only_triggered)
+    ]
+
+
+@router.post("/api/alerts", response_model=AlertOut, status_code=201)
+def create_alert(body: AlertCreate, db: Session = Depends(get_db)) -> AlertOut:
+    try:
+        created = alert_service.create_alert(db, **body.model_dump())
+    except crud.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except crud.ConflictError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return AlertOut(**created)
+
+
+@router.delete("/api/alerts/{alert_id}", status_code=204, response_class=Response)
+def delete_alert(alert_id: int, db: Session = Depends(get_db)) -> Response:
+    try:
+        alert_service.delete_alert(db, alert_id)
     except crud.NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(status_code=204)

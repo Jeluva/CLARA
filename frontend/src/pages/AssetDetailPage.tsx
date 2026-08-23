@@ -14,12 +14,19 @@ import {
   getIndicators,
   getNews,
   getPositionSizeGuide,
+  createAlert,
   createAsset,
   createThesis,
+  deleteAlert,
   deleteThesis,
+  getAlerts,
   getTheses,
   runIngestion,
   simulatePurchase,
+  type Alert,
+  type AlertCondition,
+  type AlertMetric,
+  type AlertStatus,
   type AssetSummary,
   type Conviction,
   type PositionSizeGuide,
@@ -36,7 +43,15 @@ import {
   pnlColor,
 } from "@/lib/format";
 
-type Tab = "resumen" | "noticias" | "tecnico" | "simular" | "tamano" | "tesis" | "chatbot";
+type Tab =
+  | "resumen"
+  | "noticias"
+  | "tecnico"
+  | "simular"
+  | "tamano"
+  | "tesis"
+  | "alertas"
+  | "chatbot";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "resumen", label: "Resumen" },
@@ -45,6 +60,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "simular", label: "Simular compra" },
   { id: "tamano", label: "Tamaño de posición" },
   { id: "tesis", label: "Diario de tesis" },
+  { id: "alertas", label: "Alertas" },
   { id: "chatbot", label: "Chatbot IA" },
 ];
 
@@ -141,6 +157,7 @@ export function AssetDetailPage() {
           {tab === "simular" && <SimularTab ticker={ticker} summary={summary.data} />}
           {tab === "tamano" && <TamanioTab ticker={ticker} />}
           {tab === "tesis" && <TesisTab ticker={ticker} />}
+          {tab === "alertas" && <AlertasTab ticker={ticker} />}
           {tab === "chatbot" && (
             <Card title="Análisis fundamental con IA" subtitle={`Asistente sobre ${ticker}`}>
               <Chatbot ticker={ticker} />
@@ -760,5 +777,150 @@ function TamanioTab({ ticker }: { ticker: string }) {
         </div>
       )}
     </Card>
+  );
+}
+
+const METRIC_LABELS: Record<AlertMetric, string> = {
+  price: "Precio",
+  sentiment: "Sentimiento",
+  pe_ratio: "P/E",
+};
+
+const CONDITION_LABELS: Record<AlertCondition, string> = {
+  above: "por encima de",
+  below: "por debajo de",
+};
+
+const ALERT_STATUS_STYLES: Record<AlertStatus, { label: string; cls: string }> = {
+  disparada: { label: "Disparada", cls: "bg-loss/15 text-loss" },
+  en_seguimiento: { label: "En seguimiento", cls: "bg-secondary/15 text-secondary" },
+  sin_dato: { label: "Sin dato", cls: "bg-secondary/15 text-secondary" },
+  inactiva: { label: "Inactiva", cls: "bg-secondary/15 text-secondary" },
+};
+
+function alertValueLabel(metric: AlertMetric, value: number): string {
+  if (metric === "sentiment") return value.toFixed(3);
+  if (metric === "pe_ratio") return value.toFixed(1);
+  return formatCurrency(value);
+}
+
+/** Alertas de precio, sentimiento o valuación evaluadas en vivo — no hace
+ * falta entrar a mirar el activo a mano para saber si algo cambió
+ * (docs/devlog/BACKLOG.md, v2 item 8). */
+function AlertasTab({ ticker }: { ticker: string }) {
+  const [alerts, setAlerts] = useState<Alert[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [metric, setMetric] = useState<AlertMetric>("price");
+  const [condition, setCondition] = useState<AlertCondition>("above");
+  const [threshold, setThreshold] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function reload() {
+    setLoading(true);
+    getAlerts({ ticker })
+      .then(setAlerts)
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(reload, [ticker]);
+
+  async function save() {
+    const value = Number(threshold);
+    if (!threshold || Number.isNaN(value)) {
+      setError("Ingresá un umbral numérico válido.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await createAlert({ ticker, metric, condition, threshold: value });
+      setThreshold("");
+      reload();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "No se pudo guardar la alerta");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(id: number) {
+    await deleteAlert(id);
+    reload();
+  }
+
+  return (
+    <div className="space-y-5">
+      <Card title="Nueva alerta" subtitle="Precio, sentimiento o valuación">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+          <Field label="Métrica">
+            <Select value={metric} onChange={(e) => setMetric(e.target.value as AlertMetric)}>
+              {(Object.keys(METRIC_LABELS) as AlertMetric[]).map((m) => (
+                <option key={m} value={m}>{METRIC_LABELS[m]}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Condición">
+            <Select value={condition} onChange={(e) => setCondition(e.target.value as AlertCondition)}>
+              {(Object.keys(CONDITION_LABELS) as AlertCondition[]).map((c) => (
+                <option key={c} value={c}>{CONDITION_LABELS[c]}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Umbral">
+            <Input
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value)}
+              inputMode="decimal"
+              placeholder={metric === "sentiment" ? "-1 a 1" : metric === "pe_ratio" ? "veces" : "USD"}
+            />
+          </Field>
+          <div className="flex items-end">
+            <Button onClick={save} disabled={saving}>
+              {saving ? "Guardando…" : "Crear alerta"}
+            </Button>
+          </div>
+        </div>
+        {error && <p className="mt-3 text-sm text-loss">{error}</p>}
+      </Card>
+
+      <Card title="Alertas configuradas" subtitle={`Para ${ticker}`}>
+        {loading && <Spinner />}
+        {alerts && alerts.length === 0 && (
+          <p className="py-4 text-sm text-secondary">Todavía no configuraste ninguna alerta.</p>
+        )}
+        {alerts && alerts.length > 0 && (
+          <ul className="divide-y divide-separator/60">
+            {alerts.map((a) => {
+              const status = ALERT_STATUS_STYLES[a.status];
+              return (
+                <li key={a.id} className="flex items-center justify-between gap-3 py-3.5 first:pt-0">
+                  <div>
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${status.cls}`}>
+                        {status.label}
+                      </span>
+                      <span className="text-sm text-primary">
+                        {METRIC_LABELS[a.metric]} {CONDITION_LABELS[a.condition]}{" "}
+                        {alertValueLabel(a.metric, a.threshold)}
+                      </span>
+                    </div>
+                    <span className="text-xs text-secondary">
+                      Valor actual: {a.current_value !== null ? alertValueLabel(a.metric, a.current_value) : "—"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => remove(a.id)}
+                    className="text-xs text-secondary hover:text-loss"
+                  >
+                    Eliminar
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Card>
+    </div>
   );
 }
