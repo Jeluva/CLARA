@@ -98,9 +98,21 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
         scraper, 3 categorías) o combinar bonistas (soberanos, mejor
         calidad de dato) + PPI (ONs) + alguna fuente de provinciales
         aparte.
-- [ ] 2. **Modo "solo mirar" / watchlist.** Buscar y ver datos de un ticker
-      sin tener que darlo de alta como posición primero (hoy Ingreso de
-      datos exige activo + posición antes de ver nada).
+- [x] 2. **Modo "solo mirar" / watchlist.** Hecho: el backend ya soportaba
+      esto (`asset_service.get_asset_summary` no exige posición, la
+      ingestión de precios/fundamentals corre sobre todos los assets), el
+      gap era 100% de navegación — la única forma de llegar a
+      `/activo/:ticker` era desde una fila de posición en Portfolio. Se
+      agregó un buscador de ticker en el TopNav (navega directo a
+      `/activo/TICKER`); si el activo no existe todavía, `AssetDetailPage`
+      muestra una tarjeta "agregar a seguimiento" en vez de un error 404 —
+      un click crea el `Asset` (sin posición) y dispara ingestión de
+      precios/fundamentals en background. De paso, Research ya no limitaba
+      los selectores de "Indicadores técnicos" y "Comparador de activos" a
+      los tickers con posición (`correlation.tickers`): ahora listan todos
+      los assets, así los que solo están en watchlist también se pueden
+      analizar ahí. La matriz de correlación en sí queda igual (tiene
+      sentido que sea solo de lo que se tiene, mide diversificación real).
 - [ ] 3. **Screener tipo finviz.** Filtrar un universo de tickers por
       fundamentals + técnicos (P/E bajo, momentum positivo, sector, etc.)
       para generar ideas de candidatos, no solo analizar lo que ya se eligió

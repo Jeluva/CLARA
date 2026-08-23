@@ -1,16 +1,20 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Card } from "@/components/Card";
 import { Metric } from "@/components/Metric";
 import { SentimentTag } from "@/components/SentimentTag";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { Chatbot } from "@/components/Chatbot";
+import { Button } from "@/components/Field";
 import { Spinner, ErrorState } from "@/components/Spinner";
 import { useApi, type ApiState } from "@/hooks/useApi";
 import {
+  ApiError,
   getAssetSummary,
   getIndicators,
   getNews,
+  createAsset,
+  runIngestion,
   type AssetSummary,
   type SentimentLabel,
 } from "@/lib/api";
@@ -37,10 +41,48 @@ function sentimentLabel(score: number): SentimentLabel {
   return "neutral";
 }
 
+/** Like useApi, but distinguishes "asset never loaded" (404) from a real
+ * error, so the page can offer to add it to the watchlist instead of just
+ * showing an error box — the whole point of looking up a ticker on a whim. */
+function useAssetSummary(ticker: string) {
+  const [state, setState] = useState<{
+    data: AssetSummary | null;
+    loading: boolean;
+    error: string | null;
+    notFound: boolean;
+  }>({ data: null, loading: true, error: null, notFound: false });
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setState({ data: null, loading: true, error: null, notFound: false });
+    getAssetSummary(ticker)
+      .then((data) => active && setState({ data, loading: false, error: null, notFound: false }))
+      .catch((err: unknown) => {
+        if (!active) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setState({ data: null, loading: false, error: null, notFound: true });
+        } else {
+          setState({
+            data: null,
+            loading: false,
+            error: err instanceof Error ? err.message : "Error desconocido",
+            notFound: false,
+          });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [ticker, version]);
+
+  return { ...state, reload: () => setVersion((v) => v + 1) };
+}
+
 export function AssetDetailPage() {
   const { ticker = "" } = useParams();
   const [tab, setTab] = useState<Tab>("resumen");
-  const summary = useApi(() => getAssetSummary(ticker));
+  const summary = useAssetSummary(ticker);
 
   return (
     <div>
@@ -58,33 +100,85 @@ export function AssetDetailPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-5 flex gap-1 border-b border-separator">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={[
-              "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors duration-150",
-              tab === t.id
-                ? "border-accent text-primary"
-                : "border-transparent text-secondary hover:text-primary",
-            ].join(" ")}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {summary.notFound ? (
+        <WatchlistAddCard ticker={ticker} onAdded={summary.reload} />
+      ) : (
+        <>
+          {/* Tabs */}
+          <div className="mb-5 flex gap-1 border-b border-separator">
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={[
+                  "-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors duration-150",
+                  tab === t.id
+                    ? "border-accent text-primary"
+                    : "border-transparent text-secondary hover:text-primary",
+                ].join(" ")}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
 
-      {tab === "resumen" && <ResumenTab summary={summary} />}
-      {tab === "noticias" && <NoticiasTab ticker={ticker} />}
-      {tab === "tecnico" && <TecnicoTab ticker={ticker} />}
-      {tab === "chatbot" && (
-        <Card title="Análisis fundamental con IA" subtitle={`Asistente sobre ${ticker}`}>
-          <Chatbot ticker={ticker} />
-        </Card>
+          {tab === "resumen" && <ResumenTab summary={summary} />}
+          {tab === "noticias" && <NoticiasTab ticker={ticker} />}
+          {tab === "tecnico" && <TecnicoTab ticker={ticker} />}
+          {tab === "chatbot" && (
+            <Card title="Análisis fundamental con IA" subtitle={`Asistente sobre ${ticker}`}>
+              <Chatbot ticker={ticker} />
+            </Card>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+/** Shown when the ticker isn't loaded as an asset yet — the "solo mirar"
+ * entry point: add it to the watchlist (no position required) and pull
+ * price + fundamentals for it right away. */
+function WatchlistAddCard({ ticker, onAdded }: { ticker: string; onAdded: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function add() {
+    setBusy(true);
+    setError(null);
+    try {
+      await createAsset({
+        ticker,
+        name: ticker,
+        asset_class: "equity",
+        sector: "Unknown",
+        country: "Unknown",
+        currency: "USD",
+      });
+      onAdded();
+      // Best-effort: pull price + fundamentals now instead of making the
+      // user find the buttons in Ingreso de datos. Ingestion covers every
+      // asset and is idempotent, so this is safe to fire in the background.
+      void runIngestion("prices");
+      void runIngestion("fundamentals");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "No se pudo agregar el activo");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title={`${ticker} no está en seguimiento`}>
+      <p className="mb-4 text-sm text-secondary">
+        Agregalo para ver precio, técnico, noticias y fundamentals — sin
+        necesidad de cargar una posición.
+      </p>
+      {error && <p className="mb-3 text-sm text-loss">{error}</p>}
+      <Button onClick={add} disabled={busy}>
+        {busy ? "Agregando…" : `Agregar ${ticker} a seguimiento`}
+      </Button>
+    </Card>
   );
 }
 

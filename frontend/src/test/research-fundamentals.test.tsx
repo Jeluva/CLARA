@@ -15,6 +15,15 @@ beforeEach(() => {
           json: () => Promise.resolve({ tickers: ["AAPL"], matrix: [[1]] }),
         });
       }
+      if (url.endsWith("/assets")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              { id: 1, ticker: "AAPL", name: "Apple", asset_class: "equity", sector: "Tech", country: "USA", currency: "USD" },
+            ]),
+        });
+      }
       if (url.includes("/research/indicators")) {
         return Promise.resolve({
           ok: true,
