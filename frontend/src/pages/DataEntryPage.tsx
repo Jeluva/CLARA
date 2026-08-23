@@ -165,7 +165,7 @@ export function DataEntryPage() {
         </Card>
       ) : (
         <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Card title="Activos" subtitle={`${assets.length} en cartera`}>
+          <Card title="Activos" subtitle={`${assets.length} seguidos`}>
             <ListTable
               empty="Sin activos"
               rows={assets.map((a) => ({

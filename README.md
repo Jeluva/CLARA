@@ -20,7 +20,7 @@ mi cartera —volatilidad, drawdown, concentración, correlaciones— en ningún
 Perdía contexto y, a veces, oportunidades. CLARA junta todo eso en una sola
 superficie y hace las cuentas que importan, con tests que prueban que están bien.
 
-## La solución: cinco pestañas, cada una responde una pregunta
+## La solución: seis pestañas, cada una responde una pregunta
 
 | Pestaña | Pregunta que responde |
 |---|---|
@@ -28,6 +28,7 @@ superficie y hace las cuentas que importan, con tests que prueban que están bie
 | **Noticias & Sentimiento** | ¿Qué pasa con mis activos y cómo afecta mi tesis? |
 | **Research** | ¿Estoy realmente diversificado? ¿Qué dice el técnico? |
 | **Macro** | ¿Cómo está el contexto (índices, dólar, riesgo país, tasas)? |
+| **Screener** | ¿Qué candidatos hay más allá de lo que ya tengo cargado? |
 | **Ingreso de datos** | ¿Cómo cargo y edito posiciones y fuentes? |
 
 > **Capturas:** ver `docs/screenshots/` y la bitácora narrativa por fase en

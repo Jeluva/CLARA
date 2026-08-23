@@ -36,7 +36,7 @@ beforeEach(() => {
 });
 
 describe("app shell", () => {
-  it("renders the sidebar with all five tabs", () => {
+  it("renders the sidebar with all six tabs", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <App />
@@ -47,6 +47,7 @@ describe("app shell", () => {
       "Noticias",
       "Research",
       "Macro",
+      "Screener",
       "Ingreso de datos",
     ]) {
       expect(screen.getByRole("link", { name: label })).toBeInTheDocument();
