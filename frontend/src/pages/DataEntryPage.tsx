@@ -6,9 +6,11 @@ import { ErrorState, Spinner } from "@/components/Spinner";
 import {
   ApiError,
   type Asset,
+  type Freshness,
   type PositionFull,
   type YoutubeChannel,
   getAssets,
+  getFreshness,
   getPositions,
   getChannels,
   createAsset,
@@ -20,7 +22,7 @@ import {
   deleteChannel,
   runIngestion,
 } from "@/lib/api";
-import { formatCurrency, formatNumber } from "@/lib/format";
+import { formatCurrency, formatNumber, formatRelativeTime } from "@/lib/format";
 
 type Feedback = { kind: "ok" | "error"; text: string } | null;
 
@@ -30,9 +32,16 @@ export function DataEntryPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [positions, setPositions] = useState<PositionFull[]>([]);
   const [channels, setChannels] = useState<YoutubeChannel[]>([]);
+  const [freshness, setFreshness] = useState<Freshness[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
+
+  function reloadFreshness() {
+    getFreshness()
+      .then(setFreshness)
+      .catch(() => {});
+  }
 
   async function reload() {
     setLoading(true);
@@ -51,6 +60,7 @@ export function DataEntryPage() {
 
   useEffect(() => {
     void reload();
+    reloadFreshness();
   }, []);
 
   function notify(kind: "ok" | "error", text: string) {
@@ -140,10 +150,14 @@ export function DataEntryPage() {
                 key={source}
                 label={label}
                 source={source}
-                onResult={(msg, ok) => notify(ok ? "ok" : "error", msg)}
+                onResult={(msg, ok) => {
+                  notify(ok ? "ok" : "error", msg);
+                  reloadFreshness();
+                }}
               />
             ))}
           </div>
+          <FreshnessList items={freshness} />
         </Card>
 
         <ChannelForm
@@ -574,6 +588,38 @@ function IngestionButton({
     >
       {busy ? "Procesando…" : label}
     </Button>
+  );
+}
+
+/** Cuándo se actualizó por última vez cada fuente (docs/devlog/BACKLOG.md,
+ * v2 item 9) — relevante porque una corrida de ingestión puede "andar" sin
+ * haber promovido nada nuevo (bloqueos de yfinance/YouTube, ver fase-12). */
+function FreshnessList({ items }: { items: Freshness[] }) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="mt-4 space-y-1.5 border-t border-separator pt-3">
+      {items.map((f) => {
+        const ranWithoutNewData =
+          f.last_attempt_at !== null && f.last_attempt_at !== f.last_success_at;
+        const dot = f.last_success_at === null
+          ? "bg-secondary"
+          : ranWithoutNewData
+            ? "bg-loss"
+            : "bg-gain";
+        return (
+          <li key={f.source} className="flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2 text-secondary">
+              <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+              {f.label}
+            </span>
+            <span className="text-secondary">
+              {f.last_success_at ? formatRelativeTime(f.last_success_at) : "nunca"}
+              {ranWithoutNewData && " · última corrida sin datos nuevos"}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
