@@ -13,6 +13,8 @@ from app.api.schemas import (
     IngestionResult,
     PositionCreate,
     PositionOutFull,
+    ThesisCreate,
+    ThesisOut,
     TransactionCreate,
     TranscriptIngestItem,
 )
@@ -27,6 +29,7 @@ from app.ingestion.transcripts import (
 from app.ingestion.universe import SCREENER_UNIVERSE
 from app.services import asset_service
 from app.services import crud_service as crud
+from app.services import thesis_service
 from app.storage.database import get_db
 
 router = APIRouter(tags=["data-entry"])
@@ -149,6 +152,37 @@ def create_transaction(
     except crud.ConflictError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"id": tx.id, "status": "created"}
+
+
+# --- Investment thesis journal ------------------------------------------------
+
+
+@router.get("/api/theses", response_model=list[ThesisOut])
+def list_theses(ticker: str | None = None, db: Session = Depends(get_db)) -> list[ThesisOut]:
+    """Thesis journal entries, newest first, with the real outcome so far
+    (current price, return since entry, target/stop status). Optionally
+    filtered to one ticker."""
+    return [ThesisOut(**t) for t in thesis_service.list_theses(db, ticker)]
+
+
+@router.post("/api/theses", response_model=ThesisOut, status_code=201)
+def create_thesis(body: ThesisCreate, db: Session = Depends(get_db)) -> ThesisOut:
+    try:
+        created = thesis_service.create_thesis(db, **body.model_dump())
+    except crud.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except crud.ConflictError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ThesisOut(**created)
+
+
+@router.delete("/api/theses/{thesis_id}", status_code=204, response_class=Response)
+def delete_thesis(thesis_id: int, db: Session = Depends(get_db)) -> Response:
+    try:
+        thesis_service.delete_thesis(db, thesis_id)
+    except crud.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(status_code=204)
 
 
 # --- Ingestion ---------------------------------------------------------------

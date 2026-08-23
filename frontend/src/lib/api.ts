@@ -430,3 +430,36 @@ export interface ChatResponse {
 
 export const postChat = (ticker: string, messages: ChatTurn[]) =>
   apiPost<ChatResponse>("/chat/fundamental", { ticker, messages });
+
+// --- Thesis journal ------------------------------------------------------------
+
+export type Conviction = "baja" | "media" | "alta";
+export type ThesisStatus = "en_curso" | "objetivo_alcanzado" | "stop_tocado" | "sin_precio";
+
+export interface Thesis {
+  id: number;
+  ticker: string;
+  note: string;
+  price_at_entry: number | null;
+  target_price: number | null;
+  stop_loss: number | null;
+  conviction: Conviction;
+  created_at: string;
+  current_price: number | null;
+  return_since_entry: number | null;
+  status: ThesisStatus;
+}
+
+export interface ThesisCreate {
+  ticker: string;
+  note: string;
+  target_price?: number | null;
+  stop_loss?: number | null;
+  conviction?: Conviction;
+}
+
+export const getTheses = (ticker?: string) =>
+  apiGet<Thesis[]>(`/theses${ticker ? `?ticker=${ticker}` : ""}`);
+export const createThesis = (body: ThesisCreate) =>
+  apiPost<Thesis>("/theses", body);
+export const deleteThesis = (id: number) => apiDelete(`/theses/${id}`);

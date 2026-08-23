@@ -1,4 +1,9 @@
-import type { ReactNode, InputHTMLAttributes, SelectHTMLAttributes } from "react";
+import type {
+  ReactNode,
+  InputHTMLAttributes,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 
 const baseControl =
   "w-full rounded-control border border-separator bg-bg px-3 py-2 text-sm " +
@@ -22,6 +27,10 @@ export function Field({
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={baseControl} />;
+}
+
+export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return <textarea {...props} className={`${baseControl} resize-y`} />;
 }
 
 export function Select({

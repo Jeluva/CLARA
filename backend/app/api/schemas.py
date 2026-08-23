@@ -153,6 +153,28 @@ class TransactionCreate(BaseModel):
     executed_at: datetime | None = None
 
 
+class ThesisCreate(BaseModel):
+    ticker: str = Field(min_length=1)
+    note: str = Field(min_length=1)
+    target_price: float | None = Field(default=None, gt=0)
+    stop_loss: float | None = Field(default=None, gt=0)
+    conviction: str = Field(default="media", pattern="^(baja|media|alta)$")
+
+
+class ThesisOut(BaseModel):
+    id: int
+    ticker: str
+    note: str
+    price_at_entry: float | None
+    target_price: float | None
+    stop_loss: float | None
+    conviction: str
+    created_at: str
+    current_price: float | None
+    return_since_entry: float | None
+    status: str
+
+
 class IngestionResult(BaseModel):
     source: str
     promoted: int
