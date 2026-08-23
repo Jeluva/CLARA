@@ -27,7 +27,7 @@ y un chatbot IA multi-provider:
 ### Criterios de aceptación cumplidos
 - `alembic upgrade head` crea el esquema medallion; el seed deja un portfolio de
   ejemplo + ~1 año de precios + noticias + transcripciones, 0 en cuarentena.
-- **155 tests backend (pytest) + 23 frontend (vitest) = 178 tests** en verde.
+- **155 tests backend (pytest) + 25 frontend (vitest) = 180 tests** en verde.
 - Métricas financieras verificadas a mano + test de integración sobre el seed.
 - Endpoints documentados en Swagger (`/docs`).
 - CI/CD con GitHub Actions (pytest + tsc + vitest).

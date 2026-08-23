@@ -34,16 +34,10 @@ export function ExecutiveSummary() {
       getTheses().catch(() => []),
       getFreshness().catch(() => []),
     ]).then(([a, t, f]) => {
-      setAlerts(Array.isArray(a) ? a : []);
-      setTheses(
-        Array.isArray(t)
-          ? t.filter((x) => x.status === "objetivo_alcanzado" || x.status === "stop_tocado")
-          : [],
-      );
+      setAlerts(a);
+      setTheses(t.filter((x) => x.status === "objetivo_alcanzado" || x.status === "stop_tocado"));
       setFreshness(
-        Array.isArray(f)
-          ? f.filter((x) => x.last_success_at === null || x.last_attempt_at !== x.last_success_at)
-          : [],
+        f.filter((x) => x.last_success_at === null || x.last_attempt_at !== x.last_success_at),
       );
       setLoading(false);
     });
