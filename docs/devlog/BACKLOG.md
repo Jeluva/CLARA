@@ -136,8 +136,28 @@ juzgar si un activo (acción **o bono**) está bien valuado, en un solo lugar.
       `AssetComparator` en `ResearchPage.tsx` separa la tabla en dos
       secciones ("Precio y riesgo" / "Valuación — ¿caro o barato?") en vez
       de mezclar todo en una lista plana de filas.
-- [ ] 5. **Simulación "qué pasa si compro esto".** Impacto en concentración/
-      exposición/correlación de la cartera antes de comprar de verdad.
+- [x] 5. **Simulación "qué pasa si compro esto".** Hecho: nuevo
+      `portfolio_service.simulate_purchase(db, ticker, amount)` — recibe un
+      monto en USD, arma una cartera hipotética (suma a la posición existente
+      si ya se tiene el activo, o la crea desde cero si no) sin escribir nada
+      en la DB, y devuelve antes/después de concentración top-3, Herfindahl,
+      exposición por sector/país/moneda, y la correlación promedio del activo
+      contra la cartera actual (ponderada por peso de cada tenencia). Nuevo
+      endpoint `POST /api/portfolio/simulate` (404 si el ticker no existe o
+      no tiene precio ingerido; 422 si el monto no es positivo, validado por
+      Pydantic). Pestaña nueva "Simular compra" en `AssetDetailPage`: input
+      de monto + botón, y card con peso resultante, delta de concentración/
+      HHI, lectura de correlación (diversifica / correlación moderada / se
+      mueve parecido) y el corrimiento de exposición en la categoría propia
+      del activo (sector/país/moneda). Probado en vivo contra el backend real
+      (no mock): compra nueva (SPY, no tenido) diluye top3 de 0.892 a 0.861 y
+      HHI de 0.526 a 0.492; ampliar una posición existente (AAPL) sube su
+      peso de concentración; ticker inexistente y monto ≤0 devuelven error
+      claro. Verificación de UI en navegador bloqueada por el sandbox de la
+      herramienta de automatización (no puede llegar a `localhost` — no es
+      un problema del código); cubierto en cambio con `tsc --noEmit`, build
+      de producción y la suite de vitest en verde, más las pruebas de
+      `simulate_purchase` en `test_portfolio_service.py`.
 - [ ] 6. **Diario de tesis.** Por qué se compra, precio objetivo, stop-loss,
       convicción, y contraste posterior con el resultado real.
 - [ ] 7. **Guía de tamaño de posición** según volatilidad del activo y

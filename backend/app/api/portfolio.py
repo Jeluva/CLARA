@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.schemas import (
@@ -12,6 +12,8 @@ from app.api.schemas import (
     HistoryPoint,
     PortfolioOverviewOut,
     RiskMetricsOut,
+    SimulationOut,
+    SimulationRequest,
 )
 from app.services import portfolio_service as svc
 from app.storage.database import get_db
@@ -56,3 +58,14 @@ def history(db: Session = Depends(get_db)) -> list[HistoryPoint]:
 def realized_history(db: Session = Depends(get_db)) -> list[dict]:
     """P&L realizado respetando opened_at de cada posición (ADR 0003 V2)."""
     return svc.get_realized_history(db)
+
+
+@router.post("/simulate", response_model=SimulationOut)
+def simulate(body: SimulationRequest, db: Session = Depends(get_db)) -> SimulationOut:
+    """"Qué pasa si compro esto": impacto de una compra hipotética en
+    concentración, exposición y correlación, sin tocar ninguna posición."""
+    try:
+        result = svc.simulate_purchase(db, body.ticker, body.amount)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return SimulationOut(**asdict(result))

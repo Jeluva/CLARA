@@ -133,6 +133,27 @@ export const getRealizedHistory = () =>
 export const getCorrelation = () =>
   apiGet<Correlation>("/research/correlation");
 
+export interface Simulation {
+  ticker: string;
+  amount: number;
+  quantity_added: number;
+  already_held: boolean;
+  new_weight: number;
+  total_value_before: number;
+  total_value_after: number;
+  top3_before: number;
+  top3_after: number;
+  herfindahl_before: number;
+  herfindahl_after: number;
+  correlation_to_portfolio: number | null;
+  exposure_before: Record<string, Record<string, number>>;
+  exposure_after: Record<string, Record<string, number>>;
+  warnings: string[];
+}
+
+export const simulatePurchase = (ticker: string, amount: number) =>
+  apiPost<Simulation>("/portfolio/simulate", { ticker, amount });
+
 // --- Data entry --------------------------------------------------------------
 
 export interface Asset {

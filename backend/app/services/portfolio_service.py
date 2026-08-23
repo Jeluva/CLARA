@@ -56,6 +56,25 @@ class RiskMetrics:
     herfindahl: float
 
 
+@dataclass
+class SimulationResult:
+    ticker: str
+    amount: float
+    quantity_added: float
+    already_held: bool
+    new_weight: float
+    total_value_before: float
+    total_value_after: float
+    top3_before: float
+    top3_after: float
+    herfindahl_before: float
+    herfindahl_after: float
+    correlation_to_portfolio: float | None
+    exposure_before: dict[str, dict[str, float]]
+    exposure_after: dict[str, dict[str, float]]
+    warnings: list[str]
+
+
 def _held_positions(db: Session) -> list[tuple[Asset, float, float]]:
     """Aggregate open positions per asset -> (asset, quantity, avg_cost).
 
@@ -190,18 +209,7 @@ def get_risk_metrics(db: Session) -> RiskMetrics:
 
 
 def get_exposure(db: Session) -> dict[str, dict[str, float]]:
-    snapshots = build_position_snapshots(_position_inputs(db))
-    return {
-        "sector": exposure_by_category(
-            [(s.sector, s.market_value) for s in snapshots]
-        ),
-        "country": exposure_by_category(
-            [(s.country, s.market_value) for s in snapshots]
-        ),
-        "currency": exposure_by_category(
-            [(s.currency, s.market_value) for s in snapshots]
-        ),
-    }
+    return _exposure_snapshot(build_position_snapshots(_position_inputs(db)))
 
 
 def get_history(db: Session) -> list[dict]:
@@ -326,3 +334,136 @@ def get_correlation(db: Session) -> dict:
         "tickers": list(matrix.columns),
         "matrix": matrix.round(4).to_numpy().tolist(),
     }
+
+
+def _exposure_snapshot(snapshots: list[PositionSnapshot]) -> dict[str, dict[str, float]]:
+    return {
+        "sector": exposure_by_category([(s.sector, s.market_value) for s in snapshots]),
+        "country": exposure_by_category([(s.country, s.market_value) for s in snapshots]),
+        "currency": exposure_by_category([(s.currency, s.market_value) for s in snapshots]),
+    }
+
+
+def simulate_purchase(db: Session, ticker: str, amount: float) -> SimulationResult:
+    """"What if I buy this" — impact of a hypothetical purchase on
+    concentration, exposure and diversification, without touching any
+    position (see docs/devlog/BACKLOG.md, v2 item 5).
+
+    `amount` is USD to invest. Raises ValueError (-> 404 at the router) when
+    the ticker doesn't exist or has no price to value the trade with.
+    """
+    ticker = ticker.upper()
+    if amount <= 0:
+        raise ValueError("El monto a simular debe ser mayor a cero.")
+
+    asset = db.execute(select(Asset).where(Asset.ticker == ticker)).scalar_one_or_none()
+    if asset is None:
+        raise ValueError(f"{ticker} no existe. Agregalo primero en Ingreso de datos.")
+
+    prices = latest_prices(db)
+    price = prices.get(ticker)
+    if price is None:
+        raise ValueError(f"Sin precio para {ticker}. Corré la ingestión de precios primero.")
+
+    rate = fx_service.usd_ars_rate() if asset.currency.upper() == "ARS" else None
+    price_usd = price / rate if rate else price
+    quantity_added = amount / price_usd if price_usd else 0.0
+
+    current_inputs = _position_inputs(db)
+    current_snapshots = build_position_snapshots(current_inputs)
+
+    already_held = any(p.ticker == ticker for p in current_inputs)
+    after_inputs: list[PositionInput] = []
+    for p in current_inputs:
+        if p.ticker == ticker:
+            new_qty = p.quantity + quantity_added
+            new_avg_cost = (
+                p.quantity * p.avg_cost + quantity_added * price_usd
+            ) / new_qty
+            after_inputs.append(
+                PositionInput(
+                    ticker=p.ticker,
+                    quantity=new_qty,
+                    avg_cost=new_avg_cost,
+                    latest_price=p.latest_price,
+                    sector=p.sector,
+                    country=p.country,
+                    currency=p.currency,
+                )
+            )
+        else:
+            after_inputs.append(p)
+    if not already_held:
+        after_inputs.append(
+            PositionInput(
+                ticker=ticker,
+                quantity=quantity_added,
+                avg_cost=price_usd,
+                latest_price=price_usd,
+                sector=asset.sector,
+                country=asset.country,
+                currency=asset.currency,
+            )
+        )
+
+    after_snapshots = build_position_snapshots(after_inputs)
+    weights_before = [s.weight for s in current_snapshots]
+    weights_after = [s.weight for s in after_snapshots]
+    new_weight = next((s.weight for s in after_snapshots if s.ticker == ticker), 0.0)
+
+    warnings: list[str] = []
+    other_tickers = [p.ticker for p in current_inputs if p.ticker != ticker]
+    correlation_to_portfolio: float | None = None
+    if not other_tickers:
+        warnings.append(
+            "No hay otras posiciones para comparar correlación todavía."
+        )
+    else:
+        weight_by_ticker = {s.ticker: s.weight for s in current_snapshots}
+        series = price_series_by_ticker(db, other_tickers + [ticker])
+        target_series = series.get(ticker)
+        corrs: list[float] = []
+        weights: list[float] = []
+        if target_series is None or target_series.empty:
+            warnings.append(f"Sin historial de precios para {ticker} todavía.")
+        else:
+            for other in other_tickers:
+                held_series = series.get(other)
+                if held_series is None:
+                    continue
+                aligned = pd.concat(
+                    [target_series.rename("new"), held_series.rename("held")], axis=1
+                ).dropna()
+                if len(aligned) < 3:
+                    continue
+                new_ret = daily_returns(aligned["new"].to_numpy(dtype=float))
+                held_ret = daily_returns(aligned["held"].to_numpy(dtype=float))
+                if new_ret.size < 2 or held_ret.size < 2:
+                    continue
+                c = float(np.corrcoef(new_ret, held_ret)[0, 1])
+                if not np.isnan(c):
+                    corrs.append(c)
+                    weights.append(weight_by_ticker.get(other, 0.0))
+            if corrs:
+                total_w = sum(weights) or 1.0
+                correlation_to_portfolio = sum(
+                    c * w for c, w in zip(corrs, weights)
+                ) / total_w
+
+    return SimulationResult(
+        ticker=ticker,
+        amount=amount,
+        quantity_added=quantity_added,
+        already_held=already_held,
+        new_weight=new_weight,
+        total_value_before=sum(s.market_value for s in current_snapshots),
+        total_value_after=sum(s.market_value for s in after_snapshots),
+        top3_before=top_n_concentration(weights_before, n=3),
+        top3_after=top_n_concentration(weights_after, n=3),
+        herfindahl_before=herfindahl_index(weights_before),
+        herfindahl_after=herfindahl_index(weights_after),
+        correlation_to_portfolio=correlation_to_portfolio,
+        exposure_before=_exposure_snapshot(current_snapshots),
+        exposure_after=_exposure_snapshot(after_snapshots),
+        warnings=warnings,
+    )
