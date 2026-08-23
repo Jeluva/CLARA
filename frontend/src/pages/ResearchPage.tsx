@@ -6,6 +6,7 @@ import { TechnicalChart } from "@/components/TechnicalChart";
 import { Spinner, ErrorState } from "@/components/Spinner";
 import { useApi } from "@/hooks/useApi";
 import {
+  getAssets,
   getCorrelation,
   getIndicators,
   getFundamentals,
@@ -20,15 +21,18 @@ import { pnlColor, formatCurrency, formatPercent } from "@/lib/format";
 /** Tab 3 — Research: correlation heatmap + technical indicators. */
 export function ResearchPage() {
   const correlation = useApi(getCorrelation);
+  const assets = useApi(getAssets);
+  const tickers = [...new Set((assets.data ?? []).map((a) => a.ticker))].sort();
   const [ticker, setTicker] = useState<string | null>(null);
   const [indicators, setIndicators] = useState<Indicators | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!ticker && correlation.data?.tickers.length) {
-      setTicker(correlation.data.tickers[0]);
+    if (!ticker && tickers.length) {
+      setTicker(tickers[0]);
     }
-  }, [correlation.data, ticker]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickers.join(","), ticker]);
 
   useEffect(() => {
     if (!ticker) return;
@@ -64,7 +68,7 @@ export function ResearchPage() {
         subtitle="Precio, medias móviles (20/50), RSI(14) y MACD"
         action={
           <div className="flex flex-wrap gap-1.5">
-            {correlation.data?.tickers.map((t) => (
+            {tickers.map((t) => (
               <button
                 key={t}
                 onClick={() => setTicker(t)}
@@ -86,7 +90,7 @@ export function ResearchPage() {
 
       <FundamentalsPanel ticker={ticker} />
 
-      <AssetComparator tickers={correlation.data?.tickers ?? []} />
+      <AssetComparator tickers={tickers} />
     </div>
   );
 }

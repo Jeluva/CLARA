@@ -1,5 +1,33 @@
-import { NavLink } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { NAV_TABS } from "@/lib/nav";
+
+/** Type any ticker and jump straight to its detail page — no need to hold
+ * a position (or even have the asset loaded yet) to look it up. */
+function TickerSearch() {
+  const [value, setValue] = useState("");
+  const navigate = useNavigate();
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    const ticker = value.trim().toUpperCase();
+    if (!ticker) return;
+    navigate(`/activo/${ticker}`);
+    setValue("");
+  }
+
+  return (
+    <form onSubmit={submit} className="hidden sm:block">
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="Buscar ticker…"
+        aria-label="Buscar ticker"
+        className="w-36 rounded-control border border-separator bg-bg px-3 py-1.5 text-sm text-primary placeholder:text-secondary focus:border-accent focus:outline-none transition-colors duration-150"
+      />
+    </form>
+  );
+}
 
 /** Horizontal top navigation bar (replaces the old sidebar). */
 export function TopNav() {
@@ -51,6 +79,8 @@ export function TopNav() {
             </NavLink>
           ))}
         </nav>
+
+        <TickerSearch />
 
         <span className="tabnum text-[11px] text-secondary">v0.1.0 · dev</span>
       </div>
