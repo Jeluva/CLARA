@@ -69,9 +69,15 @@ Todas las fuentes siguen `fetch → bronze → validar → promover`. El schedul
 
 ## Pendiente opcional
 
-- Si se quiere automatizar transcripciones sin intervención manual: contratar
-  el plan Residential de Webshare (el gratuito de datacenter no sirve, ya
-  probado) y cargar las credenciales en Render.
+- ~~Automatizar transcripciones sin intervención manual~~ ✓ resuelto gratis:
+  `backend/scripts/run_transcript_sync.ps1` (wrapper de
+  `fetch_transcripts_local.py`) + tarea de Windows Task Scheduler
+  ("CLARA Transcript Sync", diaria 8:00 AM) en la PC del usuario — no hizo
+  falta pagar Webshare Residential. Requiere `INGEST_SECRET` seteado tanto
+  en Render como en `backend/.env` local (mismo valor); sin eso el wrapper
+  falla con un log claro en vez de silencio. Depende de que la PC esté
+  prendida/conectada a la hora programada — si no, corre en el próximo
+  arranque (`-StartWhenAvailable`).
 
 ## Cómo quedó para revisar
 
