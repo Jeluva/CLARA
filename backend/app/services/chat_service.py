@@ -5,13 +5,19 @@ Provider priority (first key set wins; falls through on quota/rate-limit):
   2. Qwen       — QWEN_API_KEY.    Free tier. dashscope.aliyuncs.com
   3. Gemini     — GEMINI_API_KEY.  Free tier. aistudio.google.com
   4. Anthropic  — ANTHROPIC_API_KEY. console.anthropic.com
-  5. Static     — análisis regla-base, siempre disponible sin key.
+  5. Ollama     — OLLAMA_ENABLED=true, local, sin key. Último fallback
+                  antes del estático (docs/devlog/BACKLOG.md, v5 item 3):
+                  las 4 APIs cloud arriba tienen mejor calidad/latencia que
+                  un modelo 9B cuantizado en CPU, así que solo entra si
+                  ninguna de ellas está disponible.
+  6. Static     — análisis regla-base, siempre disponible sin key.
 
 Groq y Qwen usan el openai SDK con base_url personalizada (API compatible).
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -234,6 +240,81 @@ def _reply_gemini(context: str, messages: list[ChatMessage]) -> dict | None:
         return {"reply": f"No se pudo contactar al modelo: {exc}", "configured": True, "error": True}
 
 
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
+# The model echoes the "/no_think" directive itself at the start of its
+# reply in some runs (seen live: "/stop\n\nAquí tienes...", "/\n\n4") --
+# likely because the Modelfile has no explicit chat TEMPLATE, so Ollama is
+# guessing one for this fine-tune. Strip a leading "/word" line rather than
+# chase the template issue (v5 item 3): a wrong-but-harmless leading token
+# in the reply is not worth debugging further given the latency/quality
+# findings below already rule this out as a default-on fallback.
+_LEADING_DIRECTIVE_ECHO = re.compile(r"^/\S*\n+")
+
+
+def _strip_thinking(text: str) -> str:
+    """Qwen3.5 (el modelo cargado en Ollama) es un "thinking model": por
+    default envuelve su razonamiento en <think>...</think> antes de la
+    respuesta. Si el bloque llegó a cerrarse, lo saca de cualquier parte del
+    texto. Si quedó abierto -- el modelo se quedó sin presupuesto de tokens
+    pensando y nunca llegó a contestar, visto en vivo con `max_tokens=150`:
+    71s y ni un token de respuesta real -- se descarta todo desde el
+    "<think>" en adelante, quedándose solo con lo que el modelo haya dicho
+    antes (a veces nada). También pela el eco de la directiva "/no_think"
+    cuando el modelo la repite como primera línea de la respuesta."""
+    text = _THINK_BLOCK.sub("", text)
+    if "<think>" in text:
+        text = text.split("<think>", 1)[0]
+    text = _LEADING_DIRECTIVE_ECHO.sub("", text.strip())
+    return text.strip()
+
+
+def _reply_ollama(context: str, messages: list[ChatMessage]) -> dict | None:
+    """Local model via Ollama's OpenAI-compatible endpoint -- último
+    fallback antes del análisis estático (v5 item 3). A diferencia de
+    `_reply_openai_compat`, cualquier fallo (servidor no corriendo, modelo
+    no registrado con `ollama create`, timeout) cae a `None` sin
+    distinguir por status code: no tiene sentido mostrarle al usuario un
+    "Error de Ollama" cuando la razón más probable es simplemente que no
+    prendió el servidor local -- lo correcto es caer al estático
+    directamente, igual que un proveedor sin API key configurada.
+
+    "/no_think" al final del último mensaje desactiva el modo thinking de
+    Qwen3.5 -- verificado en vivo: la misma pregunta tardó 71s+ sin llegar
+    a responder con thinking activado (150 tokens, todos de razonamiento,
+    finish_reason="length") contra 6-25s con respuesta directa usando
+    "/no_think" para una pregunta trivial.
+
+    Aun así, con `/no_think`, un CPU sin GPU corriendo este 9B cuantizado
+    mide ~0.68s/token en la máquina de desarrollo (500 tokens, contexto
+    real de un activo: 5m42s) -- demasiado lento para una espera cómoda de
+    chat sincrónico si se le da rienda suelta a `max_tokens`. `max_tokens`
+    se capea bajo para acotar la espera peor-caso a unos pocos minutos en
+    vez de diez-mas; `timeout` da margen para que una respuesta lenta pero
+    real no se corte antes de llegar. Con ese límite bajo de tokens
+    también se vio una respuesta completamente fuera de tema (preguntando
+    por AAPL, contestó sobre el tipo de cambio EUR/USD) -- no es solo un
+    problema de latencia, la calidad con /no_think en este modelo/hardware
+    es floja; documentado en docs/devlog/BACKLOG.md v5 item 3 en vez de
+    ocultarlo, así quien lo prenda sabe qué esperar."""
+    from openai import OpenAI
+    model = settings.chat_model or settings.ollama_model
+    client = OpenAI(api_key="ollama", base_url=settings.ollama_base_url, timeout=180.0)
+    system = f"{SYSTEM_PROMPT}\n\nCONTEXTO DEL ACTIVO:\n{context}"
+    api_messages = [{"role": "system", "content": system}]
+    api_messages += [{"role": m.role, "content": m.content} for m in messages]
+    if api_messages:
+        last = api_messages[-1]
+        api_messages[-1] = {**last, "content": f"{last['content']}\n/no_think"}
+    try:
+        response = client.chat.completions.create(
+            model=model, messages=api_messages, max_tokens=350,
+        )
+        text = _strip_thinking(response.choices[0].message.content or "")
+        return {"reply": text, "configured": True} if text else None
+    except Exception:
+        return None
+
+
 def _static_analysis(db: Session, ticker: str) -> str:
     """Rule-based fundamental snapshot when no LLM is available."""
     ticker = ticker.upper()
@@ -338,6 +419,11 @@ def fundamental_analysis(
 
     if settings.anthropic_api_key:
         result = _reply_anthropic(context, messages)
+        if result is not None:
+            return result
+
+    if settings.ollama_enabled:
+        result = _reply_ollama(context, messages)
         if result is not None:
             return result
 

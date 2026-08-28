@@ -596,17 +596,60 @@ documentación fue dejando marcados a lo largo de v2-v4, no inventados ahora:
       en verde, `tsc --noEmit` y build de producción limpios, 25 tests
       frontend en verde (sin tests nuevos de componente — mismo criterio
       que las pestañas Tesis/Alertas, que tampoco tienen test dedicado).
-- [ ] 3. **LLM local como fallback del chat.** Investigar cómo levantar el
-      modelo GGUF de `E:/private-gpt` como servidor local (llama.cpp,
-      Ollama apuntando al gguf, o el propio server de PrivateGPT) y cómo
-      pegarle desde `chat_service.py`. Decidir su lugar en la cadena
-      (¿antes de los proveedores pagos, para ahorrar cuota? ¿último
-      fallback antes del estático, porque un modelo 9B cuantizado corriendo
-      en CPU es más lento/peor que Groq?) — probablemente último fallback
-      pago-o-local antes del estático, a confirmar con el usuario si la
-      calidad de respuesta lo amerita. Requiere el proceso local corriendo
-      (documentar cómo levantarlo); si no está corriendo, `chat_service`
-      debe saltarlo igual que salta un proveedor sin API key.
+- [x] 3. **LLM local como fallback del chat.** Hecho, con un veredicto real
+      distinto del optimista que asumía el diagnóstico. El usuario ya tenía
+      Ollama instalado y el modelo ya registrado como `qwen-aggressive`
+      (`ollama list` lo mostró de entrada — no hizo falta `ollama create`).
+      Ubicación en la cadena, confirmada con el usuario: último fallback
+      antes del estático, detrás de Groq/Qwen/Gemini/Anthropic (nueva
+      variable `OLLAMA_ENABLED`, default `false` — off en prod porque no
+      hay Ollama en Render, y localmente lo prende quien lo tenga corriendo).
+      `_reply_ollama` reusa el endpoint OpenAI-compatible de Ollama
+      (`/v1/chat/completions`, `api_key` dummy), sin pasar por
+      `_reply_openai_compat`: cualquier excepción cae a `None` sin
+      distinguir código de status, porque no tiene sentido mostrar un
+      "Error de Ollama" cuando la razón más probable es que el servidor
+      local no está corriendo.
+
+      **Dos problemas reales encontrados en vivo, no cosméticos:**
+      1. *Qwen3.5 es un modelo "thinking"*: sin desactivarlo, envuelve la
+         respuesta en `<think>...</think>` y ese razonamiento puede comerse
+         todo el `max_tokens` sin llegar nunca a contestar (medido: 150
+         tokens, 71s, `finish_reason="length"`, cero respuesta real). El
+         directive `/no_think` al final del último mensaje lo desactiva
+         (confirmado en vivo) y `_strip_thinking` limpia cualquier bloque
+         que igual se cuele (cerrado o abierto). También aparece a veces un
+         eco de la propia directiva como primera línea de la respuesta
+         (`"/stop\n\n..."`, `"/\n\n4"`) — `_strip_thinking` lo pela con una
+         regex; probablemente por falta de un `TEMPLATE` explícito en el
+         `Modelfile` de `E:/private-gpt` (no investigado más a fondo, no
+         cambia el veredicto de abajo).
+      2. *Latencia y calidad, medidas de punta a punta contra
+         `chat_service.fundamental_analysis` real (no un mock)*: ~0.53
+         s/token en esta CPU sin GPU (350 tokens → 185s con contexto real
+         de un activo seedeado). Y, más grave que la latencia: **2 de 2
+         corridas con contexto real ignoraron el contexto por completo** —
+         preguntado sobre AAPL con datos reales en el prompt, contestó
+         sobre el tipo de cambio EUR/USD una vez y sobre geopolítica
+         genérica la otra. Una respuesta segura pero fuera de tema es peor
+         que el análisis estático basado en reglas al que reemplazaría.
+         Por eso `OLLAMA_ENABLED=false` por default no es solo "no hay
+         servidor en prod" — es la conclusión real de la prueba: tal como
+         está (este modelo, esta cuantización, este hardware sin GPU), no
+         es una mejora sobre el fallback estático, es un fallback opcional
+         para quien quiera experimentar sabiendo esto.
+
+      `max_tokens=350` y `timeout=180s` en el request a Ollama para acotar
+      la espera peor-caso a unos pocos minutos en vez de diez-o-más.
+      7 tests nuevos en `test_chat.py` (fallback a Ollama cuando las 4 APIs
+      cloud no están, `_reply_ollama` con éxito/fallo/bloque `<think>`
+      cerrado/abierto-sin-respuesta/eco de directiva, y que el request
+      real que se manda al modelo trae `/no_think` agregado) + fix al test
+      existente de "sin key" que quedaba con `ollama_enabled` como
+      `MagicMock` truthy por default (rompía su propio propósito de probar
+      el camino sin ningún proveedor). 176 tests backend en verde. Sin
+      cambios de frontend — el chatbot ya pega contra el mismo endpoint,
+      la cadena de providers es invisible para la UI.
 - [ ] 4. **Bonos provinciales + rating crediticio (diferido).** Sin fuente
       accesible confirmada por ahora: Puente tiene el dato pero está detrás
       de Incapsula (ver ítem 1), PPI necesita el hub SignalR, `data912.com`
