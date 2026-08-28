@@ -124,6 +124,55 @@ def test_fetch_bonistas_metrics_filters_ticker_and_settlement(
     assert metrics["AL30"]["bond_tir"] == pytest.approx(0.09)  # 24hs, not CI
 
 
+def test_fetch_bonistas_metrics_falls_back_to_ci_when_24hs_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Some illiquid ONs only ever quote in one settlement (v5 item 1,
+    confirmed live 2026-08-28: 11 of 463 bond tickers on bonistas.com have
+    just one settlement row) -- a strict "24hs"-only filter would drop them
+    forever even though "CI" has real data."""
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> list[dict]:
+            return [
+                {"ticker": "CS44O", "settlement": "CI", "tir": 0.03, "performing": True},
+            ]
+
+    monkeypatch.setattr(
+        "app.ingestion.fundamentals.httpx.get", lambda *a, **k: _FakeResponse()
+    )
+    metrics = _fetch_bonistas_metrics({"CS44O"})
+
+    assert metrics["CS44O"]["bond_tir"] == pytest.approx(0.03)
+
+
+def test_fetch_bonistas_metrics_falls_back_to_ci_when_24hs_unusable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """24hs present but non-performing/zero-TIR (the VSCMC case) shouldn't
+    also discard a perfectly good CI quote for the same ticker."""
+
+    class _FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> list[dict]:
+            return [
+                {"ticker": "X", "settlement": "24hs", "tir": 0.0, "performing": True},
+                {"ticker": "X", "settlement": "CI", "tir": 0.05, "performing": True},
+            ]
+
+    monkeypatch.setattr(
+        "app.ingestion.fundamentals.httpx.get", lambda *a, **k: _FakeResponse()
+    )
+    metrics = _fetch_bonistas_metrics({"X"})
+
+    assert metrics["X"]["bond_tir"] == pytest.approx(0.05)
+
+
 def test_fetch_bonistas_metrics_skips_non_performing_and_zero_tir(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

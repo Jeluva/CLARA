@@ -6,6 +6,16 @@ they already hold or added one by one. Deliberately small and yfinance-
 friendly: real US listings (no separate CEDEAR pricing/ratio modeling) plus
 the Argentine equities and sovereign bonds already supported via the `.BA`
 suffix in `app.ingestion.prices._BA_TICKERS`.
+
+The corporate bonds (ONs) below get no price from yfinance either -- same
+gap as the sovereigns -- but bonistas.com's `/api/bonds` payload (already
+used for sovereign TIR/duration, v4 item 1) turned out to cover 582
+corporate ON tickers too (`bond_family in {"ONS", "ONS-CABLE"}`), not just
+the 4 sovereigns it was originally scraped for (docs/devlog/BACKLOG.md v5
+item 1). One liquid, real-maturity ("Ley Arg.", not Dollar Linked -- that
+family's TIR convention reads oddly around near-term rolls) ticker per
+issuer, picked from `performing=True` entries with a plausible TIR
+(0-30%) captured live 2026-08-28.
 """
 
 from __future__ import annotations
@@ -45,4 +55,14 @@ SCREENER_UNIVERSE: list[dict[str, str]] = [
     {"ticker": "GD30", "name": "Global 2030 (Ley NY)", "asset_class": "bond", "sector": "Government", "country": "Argentina", "currency": "USD"},
     {"ticker": "AL35", "name": "Bonar 2035 (Ley Argentina)", "asset_class": "bond", "sector": "Government", "country": "Argentina", "currency": "USD"},
     {"ticker": "AE38", "name": "Global 2038 (Ley NY)", "asset_class": "bond", "sector": "Government", "country": "Argentina", "currency": "USD"},
+    # Argentine corporate bonds (ONs) -- TIR/duration via bonistas.com, same
+    # source and code path as the sovereigns above (v5 item 1).
+    {"ticker": "YM37O", "name": "YPF S.A. ON 7.00% 2027", "asset_class": "bond", "sector": "Energy", "country": "Argentina", "currency": "USD"},
+    {"ticker": "MGCQO", "name": "Pampa Energía ON 7.25% 2028", "asset_class": "bond", "sector": "Energy", "country": "Argentina", "currency": "USD"},
+    {"ticker": "VSCOO", "name": "Vista Energy ON 6.50% 2027", "asset_class": "bond", "sector": "Energy", "country": "Argentina", "currency": "USD"},
+    {"ticker": "PN34O", "name": "Pan American Energy ON 4.97% 2027", "asset_class": "bond", "sector": "Energy", "country": "Argentina", "currency": "USD"},
+    {"ticker": "IRCNO", "name": "IRSA ON 5.75% 2027", "asset_class": "bond", "sector": "Real Estate", "country": "Argentina", "currency": "USD"},
+    {"ticker": "TSC3O", "name": "TGS ON 8.50% 2031", "asset_class": "bond", "sector": "Utilities", "country": "Argentina", "currency": "USD"},
+    {"ticker": "NPCCO", "name": "Central Puerto ON 8.00% 2029", "asset_class": "bond", "sector": "Utilities", "country": "Argentina", "currency": "USD"},
+    {"ticker": "TTCEO", "name": "Tecpetrol ON 5.50% 2029", "asset_class": "bond", "sector": "Energy", "country": "Argentina", "currency": "USD"},
 ]
