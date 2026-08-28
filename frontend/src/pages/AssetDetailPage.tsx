@@ -22,6 +22,7 @@ import {
   deleteThesis,
   getAlerts,
   getTheses,
+  getTransactions,
   runIngestion,
   simulatePurchase,
   type Alert,
@@ -35,6 +36,7 @@ import {
   type Simulation,
   type Thesis,
   type ThesisStatus,
+  type Transaction,
 } from "@/lib/api";
 import {
   formatCurrency,
@@ -51,6 +53,7 @@ type Tab =
   | "simular"
   | "tamano"
   | "tesis"
+  | "transacciones"
   | "alertas"
   | "chatbot";
 
@@ -61,6 +64,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "simular", label: "Simular compra" },
   { id: "tamano", label: "Tamaño de posición" },
   { id: "tesis", label: "Diario de tesis" },
+  { id: "transacciones", label: "Transacciones" },
   { id: "alertas", label: "Alertas" },
   { id: "chatbot", label: "Chatbot IA" },
 ];
@@ -159,6 +163,7 @@ export function AssetDetailPage() {
           {tab === "simular" && <SimularTab ticker={ticker} summary={summary.data} />}
           {tab === "tamano" && <TamanioTab ticker={ticker} />}
           {tab === "tesis" && <TesisTab ticker={ticker} />}
+          {tab === "transacciones" && <TransaccionesTab ticker={ticker} />}
           {tab === "alertas" && <AlertasTab ticker={ticker} />}
           {tab === "chatbot" && (
             <Card title="Análisis fundamental con IA" subtitle={`Asistente sobre ${ticker}`}>
@@ -520,6 +525,68 @@ function TesisTab({ ticker }: { ticker: string }) {
         )}
       </Card>
     </div>
+  );
+}
+
+const TX_TYPE_STYLES: Record<Transaction["type"], { label: string; cls: string }> = {
+  buy: { label: "Compra", cls: "bg-gain/15 text-gain" },
+  sell: { label: "Venta", cls: "bg-loss/15 text-loss" },
+};
+
+/** Historial de compras/ventas de este activo (docs/devlog/BACKLOG.md, v5
+ * item 2) — Transaction viene con portfolio_id desde v4, pero hasta acá
+ * nada lo leía; esto es la primera vista de solo-lectura sobre él. Alcance
+ * al activo actual, no al portfolio activo — cargar una transacción ya
+ * pide portfolio en Ingreso de datos, acá lo que hace falta es ver "qué
+ * pasó con este ticker" sin tener que cambiar de pestaña. */
+function TransaccionesTab({ ticker }: { ticker: string }) {
+  const [transactions, setTransactions] = useState<Transaction[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    getTransactions({ ticker })
+      .then((data) => active && setTransactions(data))
+      .catch((e) => active && setError(e instanceof ApiError ? e.message : "No se pudo cargar el historial"))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [ticker]);
+
+  return (
+    <Card title="Historial de transacciones" subtitle={`Compras y ventas registradas de ${ticker}`}>
+      {loading && <Spinner />}
+      {error && <ErrorState message={error} />}
+      {transactions && transactions.length === 0 && (
+        <p className="py-4 text-sm text-secondary">Todavía no cargaste transacciones de este activo.</p>
+      )}
+      {transactions && transactions.length > 0 && (
+        <ul className="divide-y divide-separator/60">
+          {transactions.map((t) => {
+            const style = TX_TYPE_STYLES[t.type];
+            return (
+              <li key={t.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
+                <div className="flex items-center gap-2.5">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${style.cls}`}>
+                    {style.label}
+                  </span>
+                  <span className="text-sm text-primary">
+                    {t.quantity.toLocaleString("en-US")} × {formatCurrency(t.price)}
+                  </span>
+                </div>
+                <div className="text-right text-xs text-secondary">
+                  <div>{new Date(t.executed_at).toLocaleDateString()}</div>
+                  {t.fee > 0 && <div>Comisión: {formatCurrency(t.fee)}</div>}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }
 

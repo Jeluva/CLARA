@@ -573,12 +573,29 @@ documentación fue dejando marcados a lo largo de v2-v4, no inventados ahora:
       en la respuesta JSON (no solo en la fila de la DB) y `GET
       /api/research/screener` devolvió las 36 filas sin error. 166 tests
       backend en verde (164 + 2 nuevos).
-- [ ] 2. **Historial de transacciones.** `GET /api/transactions` (filtro
-      opcional por `portfolio_id` y/o `ticker`, mismo patrón que
-      `GET /api/theses?ticker=`). Vista nueva: tabla de historial en
-      `AssetDetailPage` (transacciones de ese ticker) y/o una sección en
-      Ingreso de datos (todas las del portfolio activo) — decidir al
-      implementar cuál ubicación tiene más sentido de uso.
+- [x] 2. **Historial de transacciones.** Hecho: `GET /api/transactions`
+      (filtro opcional por `portfolio_id` y/o `ticker`, combinables, mismo
+      patrón que `GET /api/theses?ticker=`) — `crud_service.list_transactions`
+      hace el join a `Asset` igual que `list_positions`, ordenado por
+      `executed_at` descendente. Ubicación elegida: pestaña nueva
+      "Transacciones" en `AssetDetailPage` (no en Ingreso de datos) — ya
+      hay un patrón establecido ahí de pestañas de solo-lectura scopeadas al
+      ticker (Diario de tesis, Alertas), y "qué pasó con este activo" es la
+      pregunta que un historial contesta; cargar una transacción nueva sigue
+      siendo el formulario ya existente en Ingreso de datos, esto es
+      puramente de lectura. Lista con badge compra/venta (mismo estilo
+      `bg-gain|loss/15` que el resto de la app), cantidad × precio, fecha y
+      comisión si es > 0; estado vacío explícito. 2 tests nuevos en
+      `test_crud_service.py` (filtro combinado portfolio+ticker con
+      normalización de mayúsculas, orden por fecha descendente). Verificado
+      en vivo contra un servidor real en el puerto 8012 (DB descartable, no
+      mock de test): 3 transacciones repartidas en 2 portfolios y 2 tickers
+      — sin filtro devuelve las 3, `portfolio_id=2` devuelve 2, `ticker=aapl`
+      (minúscula) devuelve 2 normalizando a mayúsculas, combinado
+      `portfolio_id=3&ticker=AAPL` devuelve exactamente 1. 166 tests backend
+      en verde, `tsc --noEmit` y build de producción limpios, 25 tests
+      frontend en verde (sin tests nuevos de componente — mismo criterio
+      que las pestañas Tesis/Alertas, que tampoco tienen test dedicado).
 - [ ] 3. **LLM local como fallback del chat.** Investigar cómo levantar el
       modelo GGUF de `E:/private-gpt` como servidor local (llama.cpp,
       Ollama apuntando al gguf, o el propio server de PrivateGPT) y cómo

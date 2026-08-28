@@ -315,6 +315,25 @@ export interface TransactionCreate {
 export const createTransaction = (body: TransactionCreate) =>
   apiPost<{ id: number; status: string }>("/transactions", body);
 
+export interface Transaction {
+  id: number;
+  ticker: string;
+  portfolio_id: number;
+  type: "buy" | "sell";
+  quantity: number;
+  price: number;
+  fee: number;
+  executed_at: string;
+}
+
+export const getTransactions = (params: { ticker?: string; portfolio_id?: number | null } = {}) => {
+  const query = new URLSearchParams();
+  if (params.ticker) query.set("ticker", params.ticker);
+  if (params.portfolio_id != null) query.set("portfolio_id", String(params.portfolio_id));
+  const qs = query.toString();
+  return apiGet<Transaction[]>(`/transactions${qs ? `?${qs}` : ""}`);
+};
+
 // --- News & sentiment --------------------------------------------------------
 
 export type SentimentLabel = "positive" | "neutral" | "negative";

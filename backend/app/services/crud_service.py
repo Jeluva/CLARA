@@ -202,6 +202,18 @@ def delete_position(db: Session, position_id: int) -> None:
 # --- Transactions ------------------------------------------------------------
 
 
+def list_transactions(
+    db: Session, portfolio_id: int | None = None, ticker: str | None = None
+) -> list[tuple[Transaction, Asset]]:
+    query = select(Transaction, Asset).join(Asset, Asset.id == Transaction.asset_id)
+    if portfolio_id is not None:
+        query = query.where(Transaction.portfolio_id == portfolio_id)
+    if ticker is not None:
+        query = query.where(Asset.ticker == ticker.strip().upper())
+    rows = db.execute(query.order_by(Transaction.executed_at.desc())).all()
+    return [(t, a) for t, a in rows]
+
+
 def create_transaction(
     db: Session,
     *,
