@@ -7,10 +7,12 @@ is overwritten on each run (see `promote._upsert_fundamentals`). Many fields
 are legitimately absent for some assets (e.g. a bond has no P/E) — that's
 not a data-quality failure, just a smaller payload.
 
-For `asset_class == "bond"` (AR sovereigns), yfinance has nothing useful
-(docs/devlog/BACKLOG.md v2 item 1/3) so this also pulls TIR/TEM/TNA/duration/
-parity from bonistas.com's public JSON API and merges it into the same
-payload (v4 item 1) — one fundamentals row per asset either way, just with a
+For `asset_class == "bond"` (AR sovereigns and corporate ONs), yfinance has
+nothing useful (docs/devlog/BACKLOG.md v2 item 1/3) so this also pulls
+TIR/TEM/TNA/duration/parity from bonistas.com's public JSON API and merges
+it into the same payload (v4 item 1 for the 4 sovereigns; v5 item 1 found
+the same endpoint already covers 582 corporate ON tickers, so no second
+source was needed) — one fundamentals row per asset either way, just with a
 different set of populated fields depending on asset class.
 
 Mock mode: deterministic per-ticker fixture values, no network.
@@ -123,13 +125,19 @@ def _bond_metrics_from_entry(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _fetch_bonistas_metrics(tickers: set[str]) -> dict[str, dict[str, Any]]:
-    """TIR/TEM/TNA/duration/parity for the given AR sovereign tickers.
+    """TIR/TEM/TNA/duration/parity for the given AR bond tickers (sovereigns
+    and corporate ONs alike -- the endpoint mixes both, v5 item 1).
 
-    Each ticker appears twice in the response, once per settlement ("CI" vs
+    Most tickers appear twice in the response, once per settlement ("CI" vs
     "24hs" -- next-business-day vs same-day); "24hs" is bonistas.com's own
-    default view, so that's the one kept. Network/parse failures return {}
-    (same fail-open behaviour as the yfinance path below) rather than raising
-    -- a scrape hiccup shouldn't block ingestion for every other asset.
+    default view, so that's preferred when both are usable. A handful of
+    tickers (mostly illiquid ONs, confirmed live 2026-08-28) only ever quote
+    in one of the two, so this falls back to whichever settlement is usable
+    rather than requiring "24hs" specifically -- a strict "24hs" filter would
+    silently drop those tickers forever even though bonistas has real data
+    for them under "CI". Network/parse failures return {} (same fail-open
+    behaviour as the yfinance path below) rather than raising -- a scrape
+    hiccup shouldn't block ingestion for every other asset.
 
     Also skips non-performing bonds (`performing: false`, e.g. in default or
     a coupon halt) and any entry with `tir` falsy/zero: bonistas.com returns
@@ -147,13 +155,19 @@ def _fetch_bonistas_metrics(tickers: set[str]) -> dict[str, dict[str, Any]]:
     except Exception:
         return {}
 
-    out: dict[str, dict[str, Any]] = {}
+    by_ticker: dict[str, dict[str, dict[str, Any]]] = {}
     for entry in bonds:
         ticker = entry.get("ticker")
-        if ticker not in tickers or entry.get("settlement") != "24hs":
+        settlement = entry.get("settlement")
+        if ticker not in tickers or settlement not in ("24hs", "CI"):
             continue
         if not entry.get("performing") or not entry.get("tir"):
             continue
+        by_ticker.setdefault(ticker, {})[settlement] = entry
+
+    out: dict[str, dict[str, Any]] = {}
+    for ticker, settlements in by_ticker.items():
+        entry = settlements.get("24hs") or settlements["CI"]
         out[ticker] = _bond_metrics_from_entry(entry)
     return out
 

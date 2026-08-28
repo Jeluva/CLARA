@@ -473,8 +473,138 @@ expuestos por el trabajo reciente:
       build de producción y vitest en verde (25 tests, sin errores no
       manejados).
 
-Con los ítems 1, 2 y 3 hechos, v4 queda completa. Sin tareas pendientes en
-este momento — no inventar tareas nuevas (ver regla de cierre más abajo).
+Con los ítems 1, 2 y 3 hechos, v4 queda completa.
+
+## v5 — cerrar renta fija, historial de transacciones, LLM local
+
+Diagnóstico (2026-08-28): con v4 cerrada, CLARA cubre bien acciones/CEDEARs/
+ETFs y bonos soberanos AR (bonistas.com). Quedan tres cabos sueltos que la
+documentación fue dejando marcados a lo largo de v2-v4, no inventados ahora:
+
+1. **ONs y provinciales sin dato real.** v2 ítem 1 investigó y descartó nada:
+   dejó anotado que `portfoliopersonal.com/Cotizaciones/Ons` (PPI) es la
+   mejor fuente para obligaciones negociables (TIR, precio, volumen, sin
+   login, 1074 ONs) y `puentenet.com/cotizaciones/bonos` es la única fuente
+   con pestaña explícita "Provinciales" separada de soberanos/corporativos —
+   pero quedó sin confirmar si esa pestaña trae TIR/duration poblados o solo
+   precio. También quedó pendiente una fuente de rating crediticio (FIX SCR,
+   Moody's Local, S&P Argentina o el registro de CNV). v4 ítem 1 cerró solo
+   soberanos vía bonistas.com; ONs y provinciales quedan con `bond_tir` y el
+   resto de las columnas de renta fija en `null`, igual que antes de v4.
+   **Resuelto distinto de lo planteado — ver ítem 1**: PPI resultó no ser
+   viable (hub SignalR, sin REST de snapshot) y Puente está detrás de
+   Incapsula; bonistas.com (la fuente que v4 ya usaba) ya traía las 582 ONs
+   sin necesidad de una fuente nueva. Provinciales y rating quedan
+   diferidos en el ítem 4.
+2. **`Transaction` sin lectura.** v4 ítem 2 le dio `portfolio_id` a
+   `Transaction` "por consistencia hacia adelante", documentando de forma
+   explícita que nada lo lee todavía — no hay `GET /api/transactions` ni
+   vista en el frontend. Sin esto, cargar una transacción es un formulario
+   de solo-escritura: no hay forma de ver el historial de compras/ventas de
+   un activo o portfolio.
+3. **Chat sin fallback local.** La cadena del chatbot es
+   Groq → Qwen → Gemini → Anthropic → estático — cuatro proveedores pagos/
+   con rate limit, cero opciones offline. El usuario ya tiene un modelo GGUF
+   (`Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf`) y un checkout
+   de PrivateGPT completo en `E:/private-gpt`, bajado para este propósito y
+   sin integrar todavía.
+
+- [x] 1. **Renta fija: ONs vía bonistas.com.** Hecho, pero no como estaba
+      planteado — investigado en vivo (curl de los bundles JS de Next.js
+      cuando Chrome estuvo inestable, y Chrome directo cuando volvió) y el
+      resultado cambió el enfoque:
+      - **PPI** (`portfoliopersonal.com/Cotizaciones/Ons`) no sirve para un
+        fetch periódico simple: la tabla se llena vía un hub SignalR en
+        tiempo real contra `api.portfoliopersonal.com` (confirmado —
+        `__NEXT_DATA__` trae 0 en todos los campos de precio/TIR hasta que
+        el cliente se conecta al hub; no hay endpoint REST de snapshot,
+        solo `/api/Cotizaciones/FCI/*` para fondos, nada para bonos/ONs).
+        Requeriría un cliente WebSocket persistente, incompatible con el
+        patrón `httpx.get()` de una corrida de ingestión puntual.
+      - **Puente** (`puentenet.com/cotizaciones/bonos`) sí trae todo
+        server-rendered en una sola página (Soberanos + Provinciales +
+        Corporativos + Lebacs, confirmado con Chrome: la pestaña
+        "Argentina - Provinciales" tiene MOD DURATION/TIR%/Paridad
+        poblados, no solo precio) — pero el sitio está detrás de Incapsula
+        (bot-mitigation): `curl` con user-agent de navegador da 403 con un
+        challenge JS. Bypassearlo necesitaría un browser real corriendo en
+        el servidor de ingestión, y automatizar la evasión de un
+        anti-bot no es algo que valga la pena construir para este proyecto.
+      - **bonistas.com** — la misma API `/api/bonds` que v4 ítem 1 ya usaba
+        para los 4 soberanos resultó traer **915 entradas, 463 tickers
+        únicos**, de los cuales **582 son ONs corporativas**
+        (`bond_family` `ONS`/`ONS-CABLE`: YPF, Pampa Energía, Vista Energy,
+        Pan American Energy, IRSA, TGS, Central Puerto, Cresud, Tecpetrol,
+        Pluspetrol y más) con TIR/duration/paridad reales — nadie lo había
+        mirado más allá de los 4 tickers soberanos que la investigación
+        original buscaba. **No hizo falta una fuente nueva**: alcanzó con
+        ampliar el universo curado. **No cubre provinciales** (ningún
+        `emisor` de gobierno provincial en el payload) — ese sub-alcance
+        queda genuinamente sin fuente accesible, ver ítem 4.
+      `app/ingestion/universe.py`: 8 ONs nuevas (`asset_class="bond"`), una
+      por emisor, elegidas entre `performing=True` con TIR 0-30% (se
+      descartó la familia "Dollar Linked" por convenciones de TIR raras
+      cerca del vencimiento) y vencimiento medio, no el más corto (los más
+      cortos mostraban TIRs distorsionadas, ej. uno daba 131%).
+      `_fetch_bonistas_metrics` (`fundamentals.py`) tenía un bug real de
+      cara a este universo más grande: filtraba `settlement != "24hs"` a
+      secas, así que un ticker sin fila "24hs" (11 de 463 en el payload
+      real, 6 de ellos solo con "CI") quedaba descartado para siempre aun
+      con dato bueno disponible en "CI". Reescrito para preferir "24hs"
+      pero caer a "CI" cuando "24hs" falta o no pasa el chequeo de
+      performing/TIR-no-cero — no cambia el comportamiento de los 4
+      soberanos (ambos settlements con datos buenos) ni de las 8 ONs
+      elegidas (verificado: las 8 tienen ambos settlements poblados), pero
+      cierra el hueco para el resto del universo de bonistas. 2 tests
+      nuevos (`test_ingestion_fundamentals.py`): fallback a CI cuando falta
+      "24hs", fallback a CI cuando "24hs" existe pero no pasa el chequeo de
+      calidad. La sección "Renta fija" de Research ya renderiza cualquier
+      `bond_*` no-null — no hizo falta tocar el frontend. Verificado en
+      vivo contra un DB descartable (sqlite, `alembic upgrade head` +
+      seed del universo curado, `USE_MOCK_SOURCES=false`, no mock de test):
+      `run_fundamentals_ingestion` promovió 36/36 (0 en cuarentena); yfinance
+      devolvió 404 para las 8 ONs (esperado, no cotizan ahí) pero el
+      fail-open existente las dejó pasar igual; las 8 salieron con
+      `source="yfinance+bonistas"` y TIR/duration reales (ej. TSC3O TIR
+      6.17%, duration 4.0; NPCCO TIR 5.16%, duration 2.66); los 4 soberanos
+      y AAPL (equity) sin cambios de comportamiento; `GET
+      /api/research/fundamentals/YM37O` (servidor real en el puerto 8011,
+      no mock de test) confirmó `bond_tir`/`bond_modified_duration` no nulos
+      en la respuesta JSON (no solo en la fila de la DB) y `GET
+      /api/research/screener` devolvió las 36 filas sin error. 166 tests
+      backend en verde (164 + 2 nuevos).
+- [ ] 2. **Historial de transacciones.** `GET /api/transactions` (filtro
+      opcional por `portfolio_id` y/o `ticker`, mismo patrón que
+      `GET /api/theses?ticker=`). Vista nueva: tabla de historial en
+      `AssetDetailPage` (transacciones de ese ticker) y/o una sección en
+      Ingreso de datos (todas las del portfolio activo) — decidir al
+      implementar cuál ubicación tiene más sentido de uso.
+- [ ] 3. **LLM local como fallback del chat.** Investigar cómo levantar el
+      modelo GGUF de `E:/private-gpt` como servidor local (llama.cpp,
+      Ollama apuntando al gguf, o el propio server de PrivateGPT) y cómo
+      pegarle desde `chat_service.py`. Decidir su lugar en la cadena
+      (¿antes de los proveedores pagos, para ahorrar cuota? ¿último
+      fallback antes del estático, porque un modelo 9B cuantizado corriendo
+      en CPU es más lento/peor que Groq?) — probablemente último fallback
+      pago-o-local antes del estático, a confirmar con el usuario si la
+      calidad de respuesta lo amerita. Requiere el proceso local corriendo
+      (documentar cómo levantarlo); si no está corriendo, `chat_service`
+      debe saltarlo igual que salta un proveedor sin API key.
+- [ ] 4. **Bonos provinciales + rating crediticio (diferido).** Sin fuente
+      accesible confirmada por ahora: Puente tiene el dato pero está detrás
+      de Incapsula (ver ítem 1), PPI necesita el hub SignalR, `data912.com`
+      tiene los tickers provinciales pero solo precio/bid/ask (sin TIR ni
+      duration, ya documentado en v2). Rating crediticio (FIX SCR, Moody's
+      Local, S&P Argentina, CNV) sin investigar todavía — probablemente
+      PDF o con login, más parecido al bloqueo de YouTube en prod que a un
+      fetch simple. Retomar solo si aparece una fuente nueva o si vale la
+      pena construir un scraper con browser real; no es un fetch de una
+      línea como bonistas.
+
+Un ítem = un ciclo de loop, mismo criterio que v1-v4 (ver reglas del ciclo
+más abajo). Ítem 4 es de baja prioridad/diferido — no bloquea el resto de
+v5. No inventar ítems nuevos más allá de estos cuatro sin volver a
+diagnosticar.
 
 ## Reglas del ciclo (para no gastar tokens de más)
 
