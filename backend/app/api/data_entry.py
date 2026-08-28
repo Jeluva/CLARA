@@ -21,6 +21,7 @@ from app.api.schemas import (
     ThesisCreate,
     ThesisOut,
     TransactionCreate,
+    TransactionOut,
     TranscriptIngestItem,
 )
 from app.config import settings
@@ -184,6 +185,29 @@ def delete_position(position_id: int, db: Session = Depends(get_db)) -> Response
 
 
 # --- Transactions ------------------------------------------------------------
+
+
+@router.get("/api/transactions", response_model=list[TransactionOut])
+def list_transactions(
+    portfolio_id: int | None = None,
+    ticker: str | None = None,
+    db: Session = Depends(get_db),
+) -> list[TransactionOut]:
+    """Historial de ejecuciones, más recientes primero. Filtrable por
+    portfolio y/o ticker (mismo patrón que /api/theses?ticker=)."""
+    return [
+        TransactionOut(
+            id=tx.id,
+            ticker=asset.ticker,
+            portfolio_id=tx.portfolio_id,
+            type=tx.type,
+            quantity=tx.quantity,
+            price=tx.price,
+            fee=tx.fee,
+            executed_at=tx.executed_at,
+        )
+        for tx, asset in crud.list_transactions(db, portfolio_id, ticker)
+    ]
 
 
 @router.post("/api/transactions", status_code=201)

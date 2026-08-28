@@ -191,6 +191,17 @@ class TransactionCreate(BaseModel):
     executed_at: datetime | None = None
 
 
+class TransactionOut(BaseModel):
+    id: int
+    ticker: str
+    portfolio_id: int
+    type: str
+    quantity: float
+    price: float
+    fee: float
+    executed_at: datetime
+
+
 class ThesisCreate(BaseModel):
     ticker: str = Field(min_length=1)
     note: str = Field(min_length=1)

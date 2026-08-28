@@ -184,6 +184,57 @@ def test_create_transaction_links_to_portfolio(db: Session) -> None:
     assert tx.type == "buy"
 
 
+def test_list_transactions_filters_by_portfolio_and_ticker(db: Session) -> None:
+    crud.create_asset(
+        db, ticker="AAPL", name="Apple", asset_class="cedear",
+        sector="Tech", country="USA", currency="USD",
+    )
+    crud.create_asset(
+        db, ticker="KO", name="Coca-Cola", asset_class="cedear",
+        sector="Staples", country="USA", currency="USD",
+    )
+    p1 = crud.create_portfolio(db, name="P1")
+    p2 = crud.create_portfolio(db, name="P2")
+    crud.create_transaction(db, ticker="AAPL", portfolio_id=p1.id, type="buy", quantity=10, price=150)
+    crud.create_transaction(db, ticker="KO", portfolio_id=p1.id, type="buy", quantity=5, price=60)
+    crud.create_transaction(db, ticker="AAPL", portfolio_id=p2.id, type="sell", quantity=2, price=160)
+
+    all_tx = crud.list_transactions(db)
+    assert len(all_tx) == 3
+
+    p1_only = crud.list_transactions(db, portfolio_id=p1.id)
+    assert {a.ticker for _, a in p1_only} == {"AAPL", "KO"}
+
+    aapl_only = crud.list_transactions(db, ticker="aapl")  # lowercased input
+    assert len(aapl_only) == 2
+    assert all(a.ticker == "AAPL" for _, a in aapl_only)
+
+    p2_aapl = crud.list_transactions(db, portfolio_id=p2.id, ticker="AAPL")
+    assert len(p2_aapl) == 1
+    tx, asset = p2_aapl[0]
+    assert asset.ticker == "AAPL" and tx.type == "sell"
+
+
+def test_list_transactions_newest_first(db: Session) -> None:
+    from datetime import datetime
+
+    crud.create_asset(
+        db, ticker="AAPL", name="Apple", asset_class="cedear",
+        sector="Tech", country="USA", currency="USD",
+    )
+    portfolio = crud.create_portfolio(db, name="Test")
+    crud.create_transaction(
+        db, ticker="AAPL", portfolio_id=portfolio.id, type="buy", quantity=1, price=100,
+        executed_at=datetime(2026, 1, 1),
+    )
+    crud.create_transaction(
+        db, ticker="AAPL", portfolio_id=portfolio.id, type="buy", quantity=1, price=110,
+        executed_at=datetime(2026, 6, 1),
+    )
+    rows = crud.list_transactions(db)
+    assert [tx.price for tx, _ in rows] == [110, 100]
+
+
 # --- YouTube channels ----------------------------------------------------------
 
 
