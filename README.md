@@ -156,7 +156,7 @@ está disponible con `USE_MOCK_SOURCES=true` para desarrollo sin red.
 - [x] **Fase 9 — Chatbot IA** · análisis fundamental por activo + página de detalle.
 - [x] **Fase 10 — Datos reales** · yfinance, NewsAPI, dolarapi enchufados.
 - [x] **Fase 11 — Ingestion conectada** · pipeline real end-to-end + chatbot con fallback.
-- [x] **Chatbot multi-provider** · Groq (Llama 3.3) → Qwen → Gemini → Anthropic → estático.
+- [x] **Chatbot multi-provider** · Groq (Llama 3.3) → Qwen → Gemini → Anthropic → Ollama (local, opt-in) → estático.
 - [x] **Comparador de activos** · métricas lado a lado en Research.
 - [x] **CI/CD** · GitHub Actions (pytest + tsc + vitest).
 

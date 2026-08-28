@@ -77,6 +77,19 @@ class Settings(BaseSettings):
     # Sobrescribe el modelo del provider activo si se especifica.
     chat_model: str = ""
 
+    # LLM local via Ollama (docs/devlog/BACKLOG.md, v5 item 3) -- último
+    # fallback antes del análisis estático, para no depender pura y
+    # exclusivamente de las 4 APIs cloud. Off por default: en prod (Render)
+    # no hay Ollama corriendo, y localmente el usuario lo prende a mano
+    # cuando levantó `ollama serve` con el modelo cargado (ver README de
+    # E:/private-gpt). Ollama expone un endpoint OpenAI-compatible; no pide
+    # una API key real.
+    ollama_enabled: bool = False
+    ollama_base_url: str = "http://localhost:11434/v1"
+    # Nombre real confirmado en vivo (`ollama list`, 2026-08-28): el usuario
+    # ya había registrado el modelo de E:/private-gpt bajo este tag.
+    ollama_model: str = "qwen-aggressive"
+
     # Ingestion behaviour. During unattended dev runs we never hit the network.
     use_mock_sources: bool = True
 
