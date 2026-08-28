@@ -177,6 +177,18 @@ class Fundamentals(Base):
         String(32), nullable=True
     )
     next_earnings_date: Mapped[date_type | None] = mapped_column(nullable=True)
+
+    # Bond-only fields (docs/devlog/BACKLOG.md v4 item 1) -- null for
+    # equities/ETFs the same way pe_ratio etc. are null for bonds. Sourced
+    # from bonistas.com, the only free no-login source found with TIR/
+    # duration for AR sovereigns (see docs/BLOCKED.md history).
+    bond_tir: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bond_tem: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bond_tna: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bond_modified_duration: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bond_parity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    bond_days_to_coupon: Mapped[int | None] = mapped_column(nullable=True)
+
     source: Mapped[str] = mapped_column(String(32), default="mock")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()

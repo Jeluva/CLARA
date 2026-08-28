@@ -53,6 +53,8 @@ _FUNDAMENTALS_FIELDS = (
     "peg_ratio", "dividend_yield", "payout_ratio", "revenue_growth",
     "earnings_growth", "gross_margin", "operating_margin", "profit_margin",
     "roe", "debt_to_equity", "analyst_target_mean", "analyst_recommendation",
+    "bond_tir", "bond_tem", "bond_tna", "bond_modified_duration",
+    "bond_parity", "bond_days_to_coupon",
 )
 
 

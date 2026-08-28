@@ -83,3 +83,26 @@ def test_fundamentals_unknown_ticker_quarantined() -> None:
     payload = {"ticker": "ZZZZ", "market_cap": 1000.0}
     reason = run_checks("fundamentals", payload, CTX)
     assert reason is not None and "unknown ticker" in reason
+
+
+def test_fundamentals_negative_bond_tir_quarantined() -> None:
+    payload = {"ticker": "AAPL", "bond_tir": -0.05}
+    reason = run_checks("fundamentals", payload, CTX)
+    assert reason is not None and "bond_tir" in reason
+
+
+def test_fundamentals_negative_bond_duration_quarantined() -> None:
+    payload = {"ticker": "AAPL", "bond_modified_duration": -1.0}
+    reason = run_checks("fundamentals", payload, CTX)
+    assert reason is not None and "bond_modified_duration" in reason
+
+
+def test_fundamentals_positive_bond_metrics_pass() -> None:
+    payload = {"ticker": "AAPL", "bond_tir": 0.09, "bond_modified_duration": 1.9}
+    assert run_checks("fundamentals", payload, CTX) is None
+
+
+def test_fundamentals_negative_bond_days_to_coupon_quarantined() -> None:
+    payload = {"ticker": "AAPL", "bond_days_to_coupon": -5}
+    reason = run_checks("fundamentals", payload, CTX)
+    assert reason is not None and "bond_days_to_coupon" in reason

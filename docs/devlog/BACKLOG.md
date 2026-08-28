@@ -335,19 +335,73 @@ expuestos por el trabajo reciente:
    atención hoy?" hay que entrar a las tres. Encaja con el espíritu de v2
    (mesa de decisión, no solo tracker).
 
-- [ ] 1. **Bonos soberanos reales vía bonistas.com.** Scraper (Playwright,
-      mismo patrón que el resto de la ingestión) contra la tabla de
-      soberanos de bonistas.com: TIR, TEM, TNA, duration modificada,
-      paridad, próximo cupón. Tabla silver nueva (o extensión de
-      `fundamentals` con columnas opcionales — decidir al implementar cuál
-      ensucia menos el esquema) para los 4 bonos ya en el universo
-      (AL30/GD30/AL35/AE38). Quality check dedicado (TIR/duration
-      razonables, no negativos). Reemplazar el "—" del screener/
-      fundamentals por el dato real para esos 4 tickers. Confirmar en vivo
-      con Chrome la estructura HTML actual antes de escribir el parser (la
-      investigación de v2 es de hace semanas, el sitio puede haber
-      cambiado). ONs (PPI) y provinciales (Puente) quedan fuera de esta
-      vuelta — solo soberanos, que es lo que ya está en el universo.
+- [x] 1. **Bonos soberanos reales vía bonistas.com.** Hecho: desbloqueado en
+      la misma sesión que lo retomó (ver historial en `docs/BLOCKED.md`,
+      ahora borrado). Con Chrome conectado, `read_network_requests` sobre
+      bonistas.com mostró de entrada que el HTML server-rendered de la
+      investigación original de v2 ya no es el camino: la tabla la llena
+      un `GET https://bonistas.com/api/bonds` que el propio frontend
+      Next.js del sitio llama client-side — JSON público, sin login, sin
+      headers especiales (confirmado con `curl` directo, 200 OK). Eso
+      cambió el plan de "Playwright + parser HTML" a un fetch HTTP directo,
+      mucho más simple y sin la fragilidad de un scraper de HTML. Cada
+      ticker aparece dos veces en la respuesta (settlement `CI` vs `24hs`);
+      se usa `24hs` por ser la vista default del sitio. Extendí
+      `fundamentals` (no una tabla nueva) con 6 columnas opcionales
+      (`bond_tir`, `bond_tem`, `bond_tna`, `bond_modified_duration`,
+      `bond_parity`, `bond_days_to_coupon`) — mismo criterio ya establecido
+      ahí ("un bono no tiene P/E" ahora también es "una acción no tiene
+      TIR"), lo que evita duplicar endpoint/ingestión/freshness/botón de
+      "Ingestar fundamentals" para una tabla separada. "Próximo cupón" quedó
+      como días al próximo cupón (`bond_days_to_coupon`, dato directo de la
+      API) en vez de fecha/monto (`dQ/dF/c$m` de la UI de bonistas): esos
+      subcampos no están expuestos tal cual en el JSON, así que reconstruir
+      fecha/monto hubiera sido adivinar un cálculo que el frontend del sitio
+      hace del lado del cliente. `ingestion/fundamentals.py`: para activos
+      `asset_class == "bond"` fusiona el payload de yfinance (que sigue
+      corriendo igual que antes, y para AL30/GD30/AL35/AE38 sigue sin traer
+      nada útil, como ya documentaba v2) con las métricas de bonistas;
+      `source` queda `"yfinance+bonistas"` o `"bonistas"` según si yfinance
+      trajo algo. Un fallo de red hacia bonistas.com no bloquea el resto de
+      la ingestión (mismo fail-open que el resto de las fuentes reales).
+      Modo mock también gana fixtures determinísticas de bonos, para que
+      `USE_MOCK_SOURCES=true` (el default de dev) ejercite las columnas
+      nuevas sin red. Quality check dedicado: `bond_tir`,
+      `bond_modified_duration` y `bond_days_to_coupon` deben ser `>= 0`
+      cuando están presentes (`check_numeric_if_present`, mismo patrón que
+      `market_cap`) — pero "no negativo" solo no alcanzaba: se detectó en
+      revisión que un bono no-performing (default, halt) vuelve en la
+      respuesta de bonistas con la fila entera en cero (`tir: 0`,
+      `modified_duration: 0`, `performing: false` — caso real visto en el
+      payload en vivo, ticker `VSCMC`) en vez de directamente no aparecer,
+      y ese cero pasa el chequeo `>= 0` como si fuera una medición genuina
+      en lugar de "sin cotización usable ahora mismo". `_fetch_bonistas_metrics`
+      descarta explícitamente cualquier entrada con `performing: false` o
+      `tir` falsy/cero antes de que llegue a bronze, así un bono AR en esa
+      situación cae a `null` (el panel muestra "—", correcto) en vez de un
+      8.9% falso. Panel "Fundamentals" en Research gana una sección "Renta
+      fija" (TIR, TEM, TNA, duration mod., paridad, días a próximo cupón)
+      que solo aparece si `bond_tir` no es null — para equities/ETFs el
+      panel queda idéntico a antes. El screener no se tocó: sus columnas
+      (P/E, dividend yield, crecimiento, ROE) son todas equity-only y ya
+      manejaban bien el "—" para bonos (documentado en v2 ítem 3); no hay
+      overlap con las 6 columnas nuevas. 9 tests nuevos backend (mapeo de
+      un payload real de bonistas capturado en vivo, filtro de settlement/
+      ticker, descarte de no-performing/TIR cero, fallback a `{}` en error
+      de red, ingestión mock puebla bond_tir solo para bonos, 4 de quality
+      check) + migración Alembic (columnas nullable, sin backfill porque no
+      hay `NOT NULL` que tensar). Verificado en vivo contra el backend real
+      (puerto 8010, no
+      mock, no pisar el 8000): `POST /api/ingestion/run?source=fundamentals`
+      promovió 28/28 sin cuarentena; `GET /api/research/fundamentals/AL30`
+      devolvió TIR 8.92%, TEM 0.71%, TNA 8.57%, duration 1.91, paridad
+      86.4%, 133 días a cupón — coincide con lo que mostraba la tabla de
+      bonistas.com en el navegador en el momento de la corrida; los otros
+      3 soberanos (GD30/AL35/AE38) también poblados; AAPL (equity) sale sin
+      ningún campo `bond_*` y con `pe_ratio`/`market_cap` intactos. Downgrade
+      + upgrade de la migración probado en la misma corrida. 164 tests
+      backend + 25 frontend en verde, `tsc -b` y build de producción
+      limpios.
 - [x] 2. **`portfolio_id` en `Transaction`.** Hecho: migración Alembic
       (mismo patrón que v3: columna nullable, backfill, `NOT NULL`
       después) — si todas las posiciones existentes de un activo
@@ -419,8 +473,8 @@ expuestos por el trabajo reciente:
       build de producción y vitest en verde (25 tests, sin errores no
       manejados).
 
-Con los ítems 2 y 3 hechos, v4 queda con un solo ítem pendiente (el 1,
-bonos soberanos) — ver `docs/BLOCKED.md`.
+Con los ítems 1, 2 y 3 hechos, v4 queda completa. Sin tareas pendientes en
+este momento — no inventar tareas nuevas (ver regla de cierre más abajo).
 
 ## Reglas del ciclo (para no gastar tokens de más)
 

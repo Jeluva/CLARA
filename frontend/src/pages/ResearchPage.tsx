@@ -189,6 +189,36 @@ function FundamentalsPanel({ ticker }: { ticker: string | null }) {
             <Stat label="Recomendación" value={data.analyst_recommendation ?? null} />
             <Stat label="Próximo earnings" value={data.next_earnings_date} />
           </div>
+          {data.bond_tir != null && (
+            <div className="mt-4 border-t border-separator pt-4">
+              <p className="mb-2 text-xs uppercase tracking-wide text-secondary">
+                Renta fija
+              </p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <Stat label="TIR" value={`${(data.bond_tir * 100).toFixed(2)}%`} />
+                <Stat
+                  label="TEM"
+                  value={data.bond_tem != null ? `${(data.bond_tem * 100).toFixed(2)}%` : null}
+                />
+                <Stat
+                  label="TNA"
+                  value={data.bond_tna != null ? `${(data.bond_tna * 100).toFixed(2)}%` : null}
+                />
+                <Stat
+                  label="Duration mod."
+                  value={data.bond_modified_duration != null ? data.bond_modified_duration.toFixed(2) : null}
+                />
+                <Stat
+                  label="Paridad"
+                  value={data.bond_parity != null ? `${(data.bond_parity * 100).toFixed(1)}%` : null}
+                />
+                <Stat
+                  label="Días a próx. cupón"
+                  value={data.bond_days_to_coupon != null ? String(data.bond_days_to_coupon) : null}
+                />
+              </div>
+            </div>
+          )}
           <p className="mt-4 text-xs text-secondary">
             Fuente: {data.source} · actualizado{" "}
             {data.updated_at ? new Date(data.updated_at).toLocaleString() : "—"}

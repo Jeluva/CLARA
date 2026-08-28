@@ -156,6 +156,9 @@ CHECKS: dict[str, list[Check]] = {
         check_required("ticker"),
         check_ticker_exists,
         check_numeric_if_present("market_cap", minimum=0),
+        check_numeric_if_present("bond_tir", minimum=0),
+        check_numeric_if_present("bond_modified_duration", minimum=0),
+        check_numeric_if_present("bond_days_to_coupon", minimum=0),
     ],
 }
 

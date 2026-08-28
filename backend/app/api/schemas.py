@@ -123,6 +123,12 @@ class FundamentalsOut(BaseModel):
     analyst_target_mean: float | None
     analyst_recommendation: str | None
     next_earnings_date: str | None
+    bond_tir: float | None
+    bond_tem: float | None
+    bond_tna: float | None
+    bond_modified_duration: float | None
+    bond_parity: float | None
+    bond_days_to_coupon: int | None
 
 
 # --- Data-entry request models -----------------------------------------------

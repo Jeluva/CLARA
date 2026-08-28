@@ -466,6 +466,12 @@ export interface Fundamentals {
   analyst_target_mean: number | null;
   analyst_recommendation: string | null;
   next_earnings_date: string | null;
+  bond_tir: number | null;
+  bond_tem: number | null;
+  bond_tna: number | null;
+  bond_modified_duration: number | null;
+  bond_parity: number | null;
+  bond_days_to_coupon: number | null;
 }
 
 export const getFundamentals = (ticker: string) =>
