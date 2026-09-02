@@ -61,8 +61,12 @@ class Settings(BaseSettings):
     ingest_secret: str = ""
 
     # Groq — prioridad 1. Free tier: 14.400 req/día. Key: console.groq.com
+    # NOTA: "llama-3.3-70b-versatile" figura como modelo de producción en la
+    # doc de Groq pero devuelve 404 en cuentas sin verificación de
+    # organización (restricción de licencia de Meta) -- gpt-oss-120b no
+    # tiene esa restricción y no requiere verificación.
     groq_api_key: str = ""
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
 
     # Qwen (Alibaba DashScope) — prioridad 2. Key: dashscope.aliyuncs.com
     qwen_api_key: str = ""

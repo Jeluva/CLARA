@@ -325,6 +325,11 @@ class ChatRequest(BaseModel):
     messages: list[ChatTurn] = Field(min_length=1)
 
 
+class PortfolioChatRequest(BaseModel):
+    portfolio_id: int | None = None
+    messages: list[ChatTurn] = Field(min_length=1)
+
+
 class ChatResponse(BaseModel):
     reply: str
     configured: bool

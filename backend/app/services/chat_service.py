@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.analytics.returns import daily_returns, total_return
 from app.analytics.risk import max_drawdown, volatility
 from app.config import settings
-from app.services import news_service
+from app.services import news_service, portfolio_service, macro_service
 from app.services.market_data import price_series_by_ticker
 from app.services.portfolio_service import _position_inputs
 from app.storage.models.silver import Asset, Transcript
@@ -135,6 +135,162 @@ def _relevant_transcripts(db: Session, ticker: str, asset_name: str) -> list[Tra
     return matches[:3]
 
 
+PORTFOLIO_SYSTEM_PROMPT = """\
+Sos un analista de inversiones senior dentro de CLARA, una mesa de análisis de \
+portfolio. Tu trabajo es responder preguntas sobre la CARTERA COMPLETA del \
+usuario: composición, riesgo, exposición, noticias relevantes y contexto \
+macro. Si la pregunta es sobre un activo puntual, el CONTEXTO puede incluir \
+una sección de foco con más detalle sobre ese activo.
+
+Reglas:
+- Respondé en español, claro y conciso, con estructura (bullets cuando ayude).
+- Basate en el CONTEXTO provisto (datos reales de la cartera del usuario). El \
+contexto está acotado a lo más relevante para la pregunta -- no incluye todas \
+las noticias/transcripciones del sistema, solo las de mayor impacto en los \
+activos que tenés en cartera (o del activo puntual si la pregunta lo nombra). \
+Si necesitás un dato que no está ahí, decilo en vez de inventarlo.
+- Los precios del contexto pueden ser datos de ejemplo (mock); si el usuario \
+pregunta por niveles exactos, aclaralo.
+- NO des recomendaciones personalizadas de compra/venta ni consejo financiero \
+individualizado. Ofrecé análisis educativo y marcos de decisión. Si te piden \
+"¿compro o vendo?", explicá los factores a considerar, no una orden.
+- Sé honesto sobre la incertidumbre.
+"""
+
+_WORD = re.compile(r"[A-Za-zÀ-ÿ0-9]+")
+
+# Hard caps that keep the portfolio context bounded no matter how large the
+# portfolio or the news/transcript tables get -- the LLM always sees a fixed,
+# small amount of the *most relevant* data instead of a dump that grows
+# without limit and eventually blows the context window or drowns the
+# signal in noise.
+_MAX_POSITIONS_LISTED = 15
+_MAX_FOCUS_TICKERS = 3
+_MAX_BROAD_NEWS = 6
+_MAX_BROAD_TRANSCRIPTS = 3
+_MAX_MOVERS = 3
+
+
+def _mentioned_tickers(text: str, held: dict[str, str]) -> list[str]:
+    """Held tickers/asset names the user's latest message references.
+
+    Bounds the deep per-asset dive to what the question is actually about
+    (see `_build_asset_context`) instead of running it for every position.
+    """
+    words = {w.upper() for w in _WORD.findall(text)}
+    lower_text = text.lower()
+    return [
+        ticker
+        for ticker, name in held.items()
+        if ticker in words or (name and name.lower() in lower_text)
+    ]
+
+
+def _build_portfolio_context(
+    db: Session, messages: list[ChatMessage], portfolio_id: int | None = None
+) -> str:
+    overview = portfolio_service.get_portfolio_overview(db, portfolio_id)
+    if not overview.positions:
+        return "(La cartera no tiene posiciones abiertas todavía.)"
+
+    risk = portfolio_service.get_risk_metrics(db, portfolio_id)
+    exposure = portfolio_service.get_exposure(db, portfolio_id)
+
+    lines: list[str] = ["RESUMEN DE CARTERA"]
+    lines.append(
+        f"Valor total: {overview.total_value:,.2f} USD | "
+        f"P&L total: {overview.total_pnl:+,.2f} ({overview.total_pnl_pct * 100:+.1f}%) | "
+        f"P&L diario: {overview.daily_pnl:+,.2f} ({overview.daily_pnl_pct * 100:+.1f}%)"
+    )
+    lines.append(
+        f"Riesgo: volatilidad anualizada {risk.volatility * 100:.1f}%, "
+        f"Sharpe {risk.sharpe:.2f}, max drawdown {risk.max_drawdown * 100:.1f}%, "
+        f"beta vs SPY {risk.beta:.2f}, concentración top 3 {risk.top3_concentration * 100:.1f}%"
+    )
+    for dim in ("sector", "country", "currency"):
+        breakdown = exposure.get(dim, {})
+        if breakdown:
+            top = sorted(breakdown.items(), key=lambda kv: kv[1], reverse=True)[:5]
+            lines.append(
+                f"Exposición por {dim}: "
+                + ", ".join(f"{k} {v * 100:.0f}%" for k, v in top)
+            )
+
+    sorted_positions = sorted(overview.positions, key=lambda s: s.weight, reverse=True)
+    lines.append(f"\nPosiciones ({len(sorted_positions)} en total, por peso):")
+    for s in sorted_positions[:_MAX_POSITIONS_LISTED]:
+        lines.append(
+            f"  - {s.ticker}: peso {s.weight * 100:.1f}%, "
+            f"P&L {s.pnl_pct * 100:+.1f}%, sector {s.sector}"
+        )
+    if len(sorted_positions) > _MAX_POSITIONS_LISTED:
+        lines.append(
+            f"  … y {len(sorted_positions) - _MAX_POSITIONS_LISTED} posiciones más, "
+            "cada una de menor peso que las listadas arriba."
+        )
+
+    lines.append("\nCONTEXTO MACRO")
+    for m in macro_service.get_macro():
+        lines.append(f"  - {m['label']}: {m['value']} {m['unit']} ({m['change_pct']:+.2f}%)")
+
+    held = {s.ticker: "" for s in overview.positions}
+    assets = db.execute(
+        select(Asset).where(Asset.ticker.in_(held.keys()))
+    ).scalars().all()
+    held = {a.ticker: a.name for a in assets}
+
+    last_user = next(
+        (m.content for m in reversed(messages) if m.role == "user"), ""
+    )
+    focus = _mentioned_tickers(last_user, held)[:_MAX_FOCUS_TICKERS]
+
+    if focus:
+        lines.append(f"\nFOCO EN ACTIVOS MENCIONADOS EN LA PREGUNTA: {', '.join(focus)}")
+        for ticker in focus:
+            lines.append(f"\n--- {ticker} ---")
+            lines.append(_build_asset_context(db, ticker))
+        return "\n".join(lines)
+
+    # No specific asset named -> broad-but-bounded signals across the whole
+    # portfolio: only the highest-impact items, not everything on file.
+    all_news = news_service.list_news(db)
+    held_news = [n for n in all_news if n.ticker in held]
+    top_news = sorted(held_news, key=lambda n: abs(n.sentiment), reverse=True)[:_MAX_BROAD_NEWS]
+    if top_news:
+        lines.append("\nNOTICIAS MÁS RELEVANTES DE LA CARTERA (mayor impacto de sentimiento):")
+        for n in top_news:
+            lines.append(f"  - [{n.sentiment:+.2f}] {n.ticker}: {n.title} ({n.source}, {n.published_at})")
+
+    needles = {t.lower() for t in held} | {n.lower() for n in held.values() if n}
+    held_transcripts = [
+        t for t in news_service.list_transcripts(db)
+        if any(needle in (t["title"] + " " + t["summary"]).lower() for needle in needles)
+    ]
+    top_transcripts = sorted(
+        held_transcripts, key=lambda t: abs(t["sentiment"]), reverse=True
+    )[:_MAX_BROAD_TRANSCRIPTS]
+    if top_transcripts:
+        lines.append("\nTRANSCRIPCIONES DE YOUTUBE MÁS RELEVANTES DE LA CARTERA:")
+        for t in top_transcripts:
+            lines.append(f"  - [{t['sentiment']:+.2f}] \"{t['title']}\" ({t['source_channel']}): {t['summary']}")
+
+    by_pnl = sorted(overview.positions, key=lambda s: s.pnl_pct, reverse=True)
+    gainers = by_pnl[:_MAX_MOVERS]
+    losers = list(reversed(by_pnl[-_MAX_MOVERS:])) if len(by_pnl) > _MAX_MOVERS else []
+    if gainers:
+        lines.append(
+            "\nMayores ganadores: "
+            + ", ".join(f"{s.ticker} ({s.pnl_pct * 100:+.1f}%)" for s in gainers)
+        )
+    if losers:
+        lines.append(
+            "Mayores perdedores: "
+            + ", ".join(f"{s.ticker} ({s.pnl_pct * 100:+.1f}%)" for s in losers)
+        )
+
+    return "\n".join(lines)
+
+
 def _reply_openai_compat(
     context: str,
     messages: list[ChatMessage],
@@ -142,11 +298,12 @@ def _reply_openai_compat(
     base_url: str,
     model: str,
     provider: str,
+    system_prompt: str = SYSTEM_PROMPT,
 ) -> dict | None:
     """Generic OpenAI-compatible call. Returns None on quota/rate-limit."""
     from openai import OpenAI, APIStatusError
     client = OpenAI(api_key=api_key, base_url=base_url)
-    system = f"{SYSTEM_PROMPT}\n\nCONTEXTO DEL ACTIVO:\n{context}"
+    system = f"{system_prompt}\n\nCONTEXTO:\n{context}"
     api_messages = [{"role": "system", "content": system}]
     api_messages += [{"role": m.role, "content": m.content} for m in messages]
     try:
@@ -169,31 +326,39 @@ def _reply_openai_compat(
         return None
 
 
-def _reply_groq(context: str, messages: list[ChatMessage]) -> dict | None:
+def _reply_groq(
+    context: str, messages: list[ChatMessage], system_prompt: str = SYSTEM_PROMPT
+) -> dict | None:
     return _reply_openai_compat(
         context, messages,
         api_key=settings.groq_api_key,
         base_url="https://api.groq.com/openai/v1",
         model=settings.chat_model or settings.groq_model,
         provider="Groq",
+        system_prompt=system_prompt,
     )
 
 
-def _reply_qwen(context: str, messages: list[ChatMessage]) -> dict | None:
+def _reply_qwen(
+    context: str, messages: list[ChatMessage], system_prompt: str = SYSTEM_PROMPT
+) -> dict | None:
     return _reply_openai_compat(
         context, messages,
         api_key=settings.qwen_api_key,
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
         model=settings.chat_model or settings.qwen_model,
         provider="Qwen",
+        system_prompt=system_prompt,
     )
 
 
-def _reply_anthropic(context: str, messages: list[ChatMessage]) -> dict | None:
+def _reply_anthropic(
+    context: str, messages: list[ChatMessage], system_prompt: str = SYSTEM_PROMPT
+) -> dict | None:
     import anthropic
     model = settings.chat_model or "claude-haiku-4-5-20251001"
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-    system = f"{SYSTEM_PROMPT}\n\nCONTEXTO DEL ACTIVO:\n{context}"
+    system = f"{system_prompt}\n\nCONTEXTO:\n{context}"
     try:
         response = client.messages.create(
             model=model,
@@ -207,13 +372,15 @@ def _reply_anthropic(context: str, messages: list[ChatMessage]) -> dict | None:
         return None  # fall back to static analysis
 
 
-def _reply_gemini(context: str, messages: list[ChatMessage]) -> dict | None:
+def _reply_gemini(
+    context: str, messages: list[ChatMessage], system_prompt: str = SYSTEM_PROMPT
+) -> dict | None:
     """Returns None if quota/rate-limit is hit, so caller can fall back."""
     from google import genai
     from google.genai import types
     model = settings.chat_model or "gemini-2.0-flash"
     client = genai.Client(api_key=settings.gemini_api_key)
-    system = f"{SYSTEM_PROMPT}\n\nCONTEXTO DEL ACTIVO:\n{context}"
+    system = f"{system_prompt}\n\nCONTEXTO:\n{context}"
 
     history = []
     for m in messages[:-1]:
@@ -268,7 +435,9 @@ def _strip_thinking(text: str) -> str:
     return text.strip()
 
 
-def _reply_ollama(context: str, messages: list[ChatMessage]) -> dict | None:
+def _reply_ollama(
+    context: str, messages: list[ChatMessage], system_prompt: str = SYSTEM_PROMPT
+) -> dict | None:
     """Local model via Ollama's OpenAI-compatible endpoint -- último
     fallback antes del análisis estático (v5 item 3). A diferencia de
     `_reply_openai_compat`, cualquier fallo (servidor no corriendo, modelo
@@ -299,7 +468,7 @@ def _reply_ollama(context: str, messages: list[ChatMessage]) -> dict | None:
     from openai import OpenAI
     model = settings.chat_model or settings.ollama_model
     client = OpenAI(api_key="ollama", base_url=settings.ollama_base_url, timeout=180.0)
-    system = f"{SYSTEM_PROMPT}\n\nCONTEXTO DEL ACTIVO:\n{context}"
+    system = f"{system_prompt}\n\nCONTEXTO:\n{context}"
     api_messages = [{"role": "system", "content": system}]
     api_messages += [{"role": m.role, "content": m.content} for m in messages]
     if api_messages:
@@ -397,37 +566,104 @@ def _static_analysis(db: Session, ticker: str) -> str:
     return "\n".join(lines)
 
 
-def fundamental_analysis(
-    db: Session, ticker: str, messages: list[ChatMessage]
-) -> dict:
-    context = _build_asset_context(db, ticker)
-
+def _chat_with_fallback(
+    context: str, messages: list[ChatMessage], system_prompt: str
+) -> dict | None:
+    """Provider chain shared by every chat mode (per-asset, portfolio-wide):
+    first configured/working provider wins (see module docstring for the
+    priority order and why each one falls through instead of erroring)."""
     if settings.groq_api_key:
-        result = _reply_groq(context, messages)
+        result = _reply_groq(context, messages, system_prompt)
         if result is not None:
             return result
 
     if settings.qwen_api_key:
-        result = _reply_qwen(context, messages)
+        result = _reply_qwen(context, messages, system_prompt)
         if result is not None:
             return result
 
     if settings.gemini_api_key:
-        result = _reply_gemini(context, messages)
+        result = _reply_gemini(context, messages, system_prompt)
         if result is not None:
             return result
 
     if settings.anthropic_api_key:
-        result = _reply_anthropic(context, messages)
+        result = _reply_anthropic(context, messages, system_prompt)
         if result is not None:
             return result
 
     if settings.ollama_enabled:
-        result = _reply_ollama(context, messages)
+        result = _reply_ollama(context, messages, system_prompt)
         if result is not None:
             return result
 
+    return None
+
+
+def fundamental_analysis(
+    db: Session, ticker: str, messages: list[ChatMessage]
+) -> dict:
+    context = _build_asset_context(db, ticker)
+    result = _chat_with_fallback(context, messages, SYSTEM_PROMPT)
+    if result is not None:
+        return result
     return {
         "reply": _static_analysis(db, ticker),
+        "configured": False,
+    }
+
+
+def _static_portfolio_analysis(db: Session, portfolio_id: int | None = None) -> str:
+    """Rule-based portfolio snapshot when no LLM is available."""
+    overview = portfolio_service.get_portfolio_overview(db, portfolio_id)
+    if not overview.positions:
+        return "La cartera no tiene posiciones abiertas todavía."
+
+    risk = portfolio_service.get_risk_metrics(db, portfolio_id)
+
+    lines = ["## Resumen de cartera\n"]
+    lines.append(f"- Valor total: **{overview.total_value:,.2f} USD**")
+    lines.append(
+        f"- P&L total: **{overview.total_pnl:+,.2f} "
+        f"({overview.total_pnl_pct * 100:+.1f}%)**"
+    )
+    lines.append(
+        f"- P&L diario: {overview.daily_pnl:+,.2f} "
+        f"({overview.daily_pnl_pct * 100:+.1f}%)\n"
+    )
+    lines.append("### Riesgo")
+    lines.append(f"- Volatilidad anualizada: {risk.volatility * 100:.1f}%")
+    lines.append(f"- Sharpe: {risk.sharpe:.2f}")
+    lines.append(f"- Max drawdown: {risk.max_drawdown * 100:.1f}%")
+    lines.append(f"- Concentración top 3: {risk.top3_concentration * 100:.1f}%\n")
+
+    by_pnl = sorted(overview.positions, key=lambda s: s.pnl_pct, reverse=True)
+    lines.append("### Mayores ganadores")
+    for s in by_pnl[:3]:
+        lines.append(f"- {s.ticker}: {s.pnl_pct * 100:+.1f}%")
+    lines.append("\n### Mayores perdedores")
+    for s in reversed(by_pnl[-3:]):
+        lines.append(f"- {s.ticker}: {s.pnl_pct * 100:+.1f}%")
+
+    lines.append("\n---")
+    lines.append(
+        "_Análisis estático basado en datos de la cartera. Configurá una API "
+        "key de LLM en `.env` para respuestas conversacionales._"
+    )
+    return "\n".join(lines)
+
+
+def portfolio_analysis(
+    db: Session, messages: list[ChatMessage], portfolio_id: int | None = None
+) -> dict:
+    """Chat scoped to the whole portfolio instead of one asset -- context is
+    bounded (see `_build_portfolio_context`) so it stays useful regardless
+    of how many positions/news/transcripts exist."""
+    context = _build_portfolio_context(db, messages, portfolio_id)
+    result = _chat_with_fallback(context, messages, PORTFOLIO_SYSTEM_PROMPT)
+    if result is not None:
+        return result
+    return {
+        "reply": _static_portfolio_analysis(db, portfolio_id),
         "configured": False,
     }

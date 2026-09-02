@@ -1,15 +1,18 @@
-import { useState, useRef, useEffect, type FormEvent } from "react";
+import { useState, useRef, useEffect, type FormEvent, type ReactNode } from "react";
 import { Button, Input } from "@/components/Field";
-import { postChat, type ChatTurn } from "@/lib/api";
+import { type ChatResponse, type ChatTurn } from "@/lib/api";
 
-const SUGGESTIONS = [
-  "¿Qué tipo de activo es y qué impulsa su valor?",
-  "¿Qué dicen las noticias recientes sobre mi tesis?",
-  "¿Cuáles son los principales riesgos y catalizadores?",
-];
+interface ChatbotProps {
+  /** Sends the full conversation so far and resolves with the reply. */
+  send: (messages: ChatTurn[]) => Promise<ChatResponse>;
+  intro: ReactNode;
+  suggestions: string[];
+  placeholder: string;
+}
 
-/** Fundamental-analysis chatbot scoped to one asset. */
-export function Chatbot({ ticker }: { ticker: string }) {
+/** Chat UI shared by the per-asset and portfolio-wide assistants — only the
+ * backend call, intro copy and suggestions differ between them. */
+export function Chatbot({ send: sendMessage, intro, suggestions, placeholder }: ChatbotProps) {
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -28,7 +31,7 @@ export function Chatbot({ ticker }: { ticker: string }) {
     setInput("");
     setBusy(true);
     try {
-      const resp = await postChat(ticker, next);
+      const resp = await sendMessage(next);
       setMessages([...next, { role: "assistant", content: resp.reply }]);
       setNotice(resp.configured ? null : "Modo estático — configurá GROQ_API_KEY en .env para respuestas conversacionales.");
     } catch (e) {
@@ -50,12 +53,9 @@ export function Chatbot({ ticker }: { ticker: string }) {
       <div className="flex-1 space-y-3 overflow-y-auto pr-1">
         {messages.length === 0 && (
           <div className="py-4">
-            <p className="text-sm text-secondary">
-              Preguntale al analista de CLARA sobre los fundamentals de{" "}
-              <span className="font-medium text-primary">{ticker}</span>.
-            </p>
+            <p className="text-sm text-secondary">{intro}</p>
             <div className="mt-3 flex flex-col gap-2">
-              {SUGGESTIONS.map((s) => (
+              {suggestions.map((s) => (
                 <button
                   key={s}
                   onClick={() => send(s)}
@@ -110,7 +110,7 @@ export function Chatbot({ ticker }: { ticker: string }) {
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={`Preguntá sobre ${ticker}…`}
+          placeholder={placeholder}
           disabled={busy}
         />
         <Button type="submit" disabled={busy || !input.trim()}>

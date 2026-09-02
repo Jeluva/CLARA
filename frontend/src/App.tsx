@@ -6,6 +6,7 @@ import { ResearchPage } from "@/pages/ResearchPage";
 import { MacroPage } from "@/pages/MacroPage";
 import { ScreenerPage } from "@/pages/ScreenerPage";
 import { DataEntryPage } from "@/pages/DataEntryPage";
+import { ChatPage } from "@/pages/ChatPage";
 import { AssetDetailPage } from "@/pages/AssetDetailPage";
 import { PortfolioProvider } from "@/hooks/usePortfolios";
 
@@ -23,6 +24,7 @@ export default function App() {
               <Route path="/macro" element={<MacroPage />} />
               <Route path="/screener" element={<ScreenerPage />} />
               <Route path="/datos" element={<DataEntryPage />} />
+              <Route path="/chat" element={<ChatPage />} />
               <Route path="/activo/:ticker" element={<AssetDetailPage />} />
             </Routes>
           </div>

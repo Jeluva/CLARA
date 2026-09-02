@@ -544,6 +544,15 @@ export interface ChatResponse {
 export const postChat = (ticker: string, messages: ChatTurn[]) =>
   apiPost<ChatResponse>("/chat/fundamental", { ticker, messages });
 
+export const postPortfolioChat = (
+  portfolioId: number | null,
+  messages: ChatTurn[],
+) =>
+  apiPost<ChatResponse>("/chat/portfolio", {
+    portfolio_id: portfolioId,
+    messages,
+  });
+
 // --- Thesis journal ------------------------------------------------------------
 
 export type Conviction = "baja" | "media" | "alta";
