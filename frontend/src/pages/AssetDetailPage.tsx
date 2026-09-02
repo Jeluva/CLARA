@@ -23,6 +23,7 @@ import {
   getAlerts,
   getTheses,
   getTransactions,
+  postChat,
   runIngestion,
   simulatePurchase,
   type Alert,
@@ -167,7 +168,21 @@ export function AssetDetailPage() {
           {tab === "alertas" && <AlertasTab ticker={ticker} />}
           {tab === "chatbot" && (
             <Card title="Análisis fundamental con IA" subtitle={`Asistente sobre ${ticker}`}>
-              <Chatbot ticker={ticker} />
+              <Chatbot
+                send={(messages) => postChat(ticker, messages)}
+                placeholder={`Preguntá sobre ${ticker}…`}
+                suggestions={[
+                  "¿Qué tipo de activo es y qué impulsa su valor?",
+                  "¿Qué dicen las noticias recientes sobre mi tesis?",
+                  "¿Cuáles son los principales riesgos y catalizadores?",
+                ]}
+                intro={
+                  <>
+                    Preguntale al analista de CLARA sobre los fundamentals de{" "}
+                    <span className="font-medium text-primary">{ticker}</span>.
+                  </>
+                }
+              />
             </Card>
           )}
         </>
